@@ -10,19 +10,23 @@ class UserRole(str, Enum):
     ADMIN = "ADMIN"
 
 
-class UserStatus(str, Enum):
+class AccountStatus(str, Enum):
     ACTIVE = "ACTIVE"
-    PENDING_VERIFICATION = "PENDING_VERIFICATION"
-    SUSPENDED = "SUSPENDED"
+    PENDING = "PENDING"
+    REJECTED = "REJECTED"
+    INACTIVE = "INACTIVE"
+
+
+# Keep UserStatus alias for backward compatibility if referenced
+UserStatus = AccountStatus
 
 
 class User(MongoBaseModel):
-    email: EmailStr
-    hashed_password: str
-    full_name: str
-    role: UserRole = UserRole.PATIENT
-    status: UserStatus = UserStatus.ACTIVE
-    phone_number: Optional[str] = None
-    is_email_verified: bool = False
-    license_number: Optional[str] = None  # Relevant for HEALTHCARE_WORKER
-    clinic_or_hospital: Optional[str] = None  # Relevant for HEALTHCARE_WORKER
+    name: str = Field(..., description="User's full name")
+    email: EmailStr = Field(..., description="Unique email address")
+    hashed_password: str = Field(..., description="Salted and hashed password")
+    role: UserRole = Field(default=UserRole.PATIENT, description="System role")
+    account_status: AccountStatus = Field(default=AccountStatus.ACTIVE, description="Lifecycle status")
+    license_number: Optional[str] = Field(default=None, description="Medical license number for HEALTHCARE_WORKER")
+    clinic_or_hospital: Optional[str] = Field(default=None, description="Affiliated clinic or hospital name")
+    status_reason: Optional[str] = Field(default=None, description="Reason for rejection or deactivation")

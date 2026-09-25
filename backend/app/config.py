@@ -36,10 +36,16 @@ class Settings(BaseSettings):
     MONGODB_DB_NAME: str = "vaxassist_db"
     MONGODB_SERVER_SELECTION_TIMEOUT_MS: int = 2000
 
-    # Authentication & JWT (For Phase 2)
-    JWT_SECRET_KEY: str = "vaxassist-ai-dev-secret-key-phase-1"
+    # Authentication & JWT
+    JWT_SECRET_KEY: str = "vaxassist-ai-dev-secret-key-phase-2-auth-security-2026"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+
+    # Initial Admin Bootstrap (Phase 2)
+    ADMIN_EMAIL: str = "admin@vaxassist.ai"
+    ADMIN_PASSWORD: str = "Admin@VaxAssist2026"
+    ADMIN_NAME: str = "System Administrator"
+    AUTO_BOOTSTRAP_ADMIN: bool = True
 
     # LLM Settings (For Phase 7 & 8)
     LLM_PROVIDER: str = "gemini"

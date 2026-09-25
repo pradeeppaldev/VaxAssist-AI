@@ -1,5 +1,5 @@
 from app.models.base import MongoBaseModel
-from app.models.user import User, UserRole, UserStatus
+from app.models.user import User, UserRole, UserStatus, AccountStatus
 from app.models.family import Family, FamilyMember, Gender, FamilyRelationship
 from app.models.vaccination import VaccinationRecord, VaccinationSchedule, VaccinationStatus
 from app.models.notification import Notification, NotificationChannel, NotificationType, NotificationStatus
@@ -12,6 +12,7 @@ __all__ = [
     "User",
     "UserRole",
     "UserStatus",
+    "AccountStatus",
     "Family",
     "FamilyMember",
     "Gender",

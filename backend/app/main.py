@@ -19,6 +19,10 @@ async def lifespan(app: FastAPI):
     # Startup: Connect to MongoDB
     logger.info("Initializing VaxAssist AI application...")
     await db_manager.connect()
+    # Bootstrap initial admin if configured and database is connected
+    if db_manager.is_connected:
+        from app.services.user_service import user_service
+        await user_service.bootstrap_admin()
     yield
     # Shutdown: Close database connections
     logger.info("Shutting down VaxAssist AI application...")
