@@ -261,6 +261,8 @@ class VaccinationService:
         member_id: str,
         reference_date: Optional[date] = None,
         user_role: str = UserRole.PATIENT.value,
+        eligible_for_je: bool = False,
+        include_private_optional: bool = False,
     ) -> Dict[str, Any]:
         """
         Calculates and returns the complete deterministic vaccination schedule
@@ -289,6 +291,8 @@ class VaccinationService:
             date_of_birth=dob,
             existing_records=records,
             reference_date=reference_date or date.today(),
+            eligible_for_je=eligible_for_je,
+            include_private_optional=include_private_optional,
         )
 
         # 5. Format current age display

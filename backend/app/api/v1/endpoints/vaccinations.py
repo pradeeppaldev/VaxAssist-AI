@@ -20,12 +20,16 @@ router = APIRouter(dependencies=[Depends(require_active_user)])
     response_model=APIResponse[List[dict]],
     summary="Get official vaccination schedule catalog",
 )
-async def get_schedule_catalog():
-    """Returns the immutable standard WHO/National Immunization Schedule rules catalogue."""
+async def get_schedule_catalog(
+    category: Optional[str] = Query(None, description="Optional category filter: UNIVERSAL_NIS, CONDITIONAL_NIS, PRIVATE_OPTIONAL"),
+):
+    """Returns the immutable WHO / National Immunization Schedule rules catalogue."""
+    from app.services.schedule_catalog import ALL_VACCINE_CATALOG, get_catalog
+    data = get_catalog(category=category) if category else ALL_VACCINE_CATALOG
     return APIResponse[List[dict]](
         success=True,
-        message="Standard vaccination catalog retrieved successfully.",
-        data=STANDARD_VACCINATION_SCHEDULE,
+        message="Vaccination catalog retrieved successfully.",
+        data=data,
     )
 
 
@@ -93,18 +97,22 @@ async def list_member_records(
 async def get_member_schedule(
     member_id: str = Path(..., description="ID of the family member"),
     reference_date: Optional[date] = Query(None, description="Optional reference date for calculation (defaults to today)"),
+    eligible_for_je: bool = Query(False, description="Whether member is in a Japanese Encephalitis endemic district"),
+    include_private: bool = Query(False, description="Whether to include private/IAP optional vaccines in schedule"),
     current_user: dict = Depends(get_current_user),
 ):
     """
     Deterministic Schedule Calculation:
-    Produces member's entire immunization schedule with statuses (COMPLETED, DUE, OVERDUE, UPCOMING),
-    taking into account birth date, past administration history, and minimum interval constraints.
+    Produces member's entire immunization schedule with statuses (COMPLETED, DUE, OVERDUE, UPCOMING, MISSED),
+    taking into account birth date, past administration history, strict birth-dose windows, and interval constraints.
     """
     schedule_data = await vaccination_service.get_member_schedule(
         owner_user_id=current_user["id"],
         member_id=member_id,
         reference_date=reference_date,
         user_role=current_user.get("role"),
+        eligible_for_je=eligible_for_je,
+        include_private_optional=include_private,
     )
     return APIResponse[MemberScheduleResponse](
         success=True,

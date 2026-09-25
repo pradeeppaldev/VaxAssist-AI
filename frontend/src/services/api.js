@@ -188,8 +188,11 @@ export const familyApi = {
  * Vaccination Management & Schedule API (Phase 4)
  */
 export const vaccinationApi = {
-  getCatalog: async () => {
-    return await request('/vaccinations/catalog', {
+  getCatalog: async (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.category) query.append('category', params.category);
+    const queryString = query.toString() ? `?${query.toString()}` : '';
+    return await request(`/vaccinations/catalog${queryString}`, {
       method: 'GET',
     });
   },
@@ -200,8 +203,13 @@ export const vaccinationApi = {
     });
   },
 
-  getMemberSchedule: async (memberId) => {
-    return await request(`/vaccinations/member/${memberId}/schedule`, {
+  getMemberSchedule: async (memberId, params = {}) => {
+    const query = new URLSearchParams();
+    if (params.reference_date) query.append('reference_date', params.reference_date);
+    if (params.eligible_for_je) query.append('eligible_for_je', 'true');
+    if (params.include_private) query.append('include_private', 'true');
+    const queryString = query.toString() ? `?${query.toString()}` : '';
+    return await request(`/vaccinations/member/${memberId}/schedule${queryString}`, {
       method: 'GET',
     });
   },

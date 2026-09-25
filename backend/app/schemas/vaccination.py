@@ -88,6 +88,17 @@ class ScheduledDoseResponse(BaseModel):
     record_id: Optional[str] = None
     status_reason: str
     category: str
+    code: Optional[str] = None
+    series_code: Optional[str] = None
+    full_name: Optional[str] = None
+    route: Optional[str] = None
+    site: Optional[str] = None
+    dose_amount: Optional[str] = None
+    is_conditional: Optional[bool] = False
+    condition_tag: Optional[str] = None
+    condition_description: Optional[str] = None
+    source_guideline: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class MemberScheduleSummary(BaseModel):
@@ -96,6 +107,7 @@ class MemberScheduleSummary(BaseModel):
     due_count: int
     overdue_count: int
     upcoming_count: int
+    missed_count: int = 0
     completion_percentage: float
 
 

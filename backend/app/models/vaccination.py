@@ -5,6 +5,12 @@ from pydantic import Field
 from app.models.base import MongoBaseModel
 
 
+class VaccineCategory(str, Enum):
+    UNIVERSAL_NIS = "UNIVERSAL_NIS"
+    CONDITIONAL_NIS = "CONDITIONAL_NIS"
+    PRIVATE_OPTIONAL = "PRIVATE_OPTIONAL"
+
+
 class VaccinationStatus(str, Enum):
     UPCOMING = "UPCOMING"
     DUE = "DUE"

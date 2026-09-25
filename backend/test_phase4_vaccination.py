@@ -170,18 +170,19 @@ def test_phase4_suite():
     assert bcg_sched["administered_date"] == dob_child
 
     # Verify Penta-1 is COMPLETED
-    penta1_sched = next(i for i in items if i["vaccine_code"] == "PENTA" and i["dose_number"] == 1)
+    penta1_sched = next(i for i in items if (i["vaccine_code"] == "PENTA_1" or i.get("series_code") == "PENTA") and i["dose_number"] == 1)
     assert penta1_sched["status"] == "COMPLETED"
 
-    # Verify HepB Birth Dose is OVERDUE (was not administered within 30 days of birth)
-    hepb_sched = next(i for i in items if i["vaccine_code"] == "HEPB" and i["dose_number"] == 1)
-    assert hepb_sched["status"] == "OVERDUE"
+    # Verify HepB Birth Dose is MISSED (infant is 70 days old; target is strictly within 24 hours)
+    hepb_sched = next(i for i in items if i["vaccine_code"] == "HEPB_BIRTH" or (i.get("series_code") == "HEPB") and i["dose_number"] == 1)
+    assert hepb_sched["status"] == "MISSED"
+    assert "strictly within 24 hours" in hepb_sched["status_reason"]
 
     # Verify Penta-2 is evaluated with sequence and interval awareness
-    penta2_sched = next(i for i in items if i["vaccine_code"] == "PENTA" and i["dose_number"] == 2)
+    penta2_sched = next(i for i in items if (i["vaccine_code"] == "PENTA_2" or i.get("series_code") == "PENTA") and i["dose_number"] == 2)
     assert penta2_sched["status"] in ["DUE", "UPCOMING", "OVERDUE"]
 
-    print("PASS: Deterministic schedule correctly categorized COMPLETED, OVERDUE, and DUE doses.")
+    print("PASS: Deterministic schedule correctly categorized COMPLETED, MISSED, and DUE doses.")
 
     # 11. IDOR & Cross-User Security Check
     print_step("11. IDOR & Cross-User Security Check (Patient B vs Patient A Data)")
