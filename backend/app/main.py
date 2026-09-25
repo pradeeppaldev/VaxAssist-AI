@@ -22,7 +22,9 @@ async def lifespan(app: FastAPI):
     # Bootstrap initial admin if configured and database is connected
     if db_manager.is_connected:
         from app.services.user_service import user_service
+        from app.services.family_service import family_service
         await user_service.bootstrap_admin()
+        await family_service.init_indexes()
     yield
     # Shutdown: Close database connections
     logger.info("Shutting down VaxAssist AI application...")

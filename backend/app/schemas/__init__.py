@@ -7,6 +7,14 @@ from app.schemas.auth import (
     UserStatusUpdateRequest,
     UserRoleUpdateRequest,
 )
+from app.schemas.family import (
+    FamilyCreateRequest,
+    FamilyUpdateRequest,
+    FamilyResponse,
+    FamilyMemberCreateRequest,
+    FamilyMemberUpdateRequest,
+    FamilyMemberResponse,
+)
 
 __all__ = [
     "APIResponse",
@@ -17,4 +25,10 @@ __all__ = [
     "TokenResponse",
     "UserStatusUpdateRequest",
     "UserRoleUpdateRequest",
+    "FamilyCreateRequest",
+    "FamilyUpdateRequest",
+    "FamilyResponse",
+    "FamilyMemberCreateRequest",
+    "FamilyMemberUpdateRequest",
+    "FamilyMemberResponse",
 ]

@@ -127,4 +127,61 @@ export const adminApi = {
   },
 };
 
+/**
+ * Family & Patient Management API (Phase 3)
+ */
+export const familyApi = {
+  getMyFamily: async () => {
+    return await request('/families/me', {
+      method: 'GET',
+    });
+  },
+
+  createFamily: async (payload) => {
+    return await request('/families', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  updateMyFamily: async (payload) => {
+    return await request('/families/me', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getMembers: async () => {
+    return await request('/families/me/members', {
+      method: 'GET',
+    });
+  },
+
+  addMember: async (payload) => {
+    return await request('/families/me/members', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getMember: async (memberId) => {
+    return await request(`/families/me/members/${memberId}`, {
+      method: 'GET',
+    });
+  },
+
+  updateMember: async (memberId, payload) => {
+    return await request(`/families/me/members/${memberId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteMember: async (memberId) => {
+    return await request(`/families/me/members/${memberId}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 export { API_BASE_URL };
