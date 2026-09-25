@@ -2,20 +2,133 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  color-scheme: light;
+@layer base {
+  :root {
+    /* VaxAssist Palette:
+       PRIMARY: #15C2D9 (HSL: 187 82% 47%)
+       DARK: #1F2C49 (HSL: 221 40% 20%)
+       BACKGROUND: #FDFEFE (HSL: 180 33% 99.5%)
+       LIGHT: #EDF3F7 (HSL: 204 33% 95%)
+    */
+    --background: 180 33% 99.5%;
+    --foreground: 221 40% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 221 40% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 221 40% 20%;
+
+    --primary: 187 82% 47%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 204 33% 95%;
+    --secondary-foreground: 221 40% 20%;
+
+    --muted: 204 33% 95%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 204 33% 95%;
+    --accent-foreground: 221 40% 20%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 187 82% 47%;
+
+    --radius: 0.75rem;
+
+    /* Healthcare Semantic Status Tokens */
+    --status-completed: 158 64% 42%;
+    --status-completed-foreground: 158 75% 18%;
+    --status-completed-bg: 152 76% 96%;
+
+    --status-upcoming: 215 16% 47%;
+    --status-upcoming-foreground: 217 33% 17%;
+    --status-upcoming-bg: 210 40% 96%;
+
+    --status-due: 217 91% 60%;
+    --status-due-foreground: 224 76% 28%;
+    --status-due-bg: 214 95% 95%;
+
+    --status-overdue: 0 84% 60%;
+    --status-overdue-foreground: 0 74% 30%;
+    --status-overdue-bg: 0 93% 97%;
+
+    --status-missed: 240 5% 45%;
+    --status-missed-foreground: 240 6% 20%;
+    --status-missed-bg: 240 5% 96%;
+
+    --status-catchup: 38 92% 50%;
+    --status-catchup-foreground: 32 81% 29%;
+    --status-catchup-bg: 48 96% 96%;
+
+    --status-review: 262 83% 58%;
+    --status-review-foreground: 263 70% 32%;
+    --status-review-bg: 269 100% 97%;
+  }
+
+  .dark {
+    --background: 223 47% 9%;      /* #0C121E deep healthcare night */
+    --foreground: 204 33% 96%;     /* #EDF3F7 clear readable light text */
+
+    --card: 222 43% 13%;           /* #121A2A elevated surface */
+    --card-foreground: 204 33% 96%;
+
+    --popover: 222 43% 13%;
+    --popover-foreground: 204 33% 96%;
+
+    --primary: 187 82% 47%;        /* #15C2D9 preserved cyan accent */
+    --primary-foreground: 221 40% 12%;
+
+    --secondary: 221 35% 18%;      /* #1D283E subtle dark container */
+    --secondary-foreground: 204 33% 96%;
+
+    --muted: 221 35% 18%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 221 35% 18%;
+    --accent-foreground: 204 33% 96%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 222 30% 22%;         /* #273552 clean accessible border */
+    --input: 222 30% 22%;
+    --ring: 187 82% 47%;
+
+    /* Dark Mode Status Tokens */
+    --status-completed-bg: 155 70% 12%;
+    --status-completed-foreground: 151 65% 65%;
+
+    --status-upcoming-bg: 220 20% 16%;
+    --status-upcoming-foreground: 215 20% 75%;
+
+    --status-due-bg: 220 60% 15%;
+    --status-due-foreground: 213 90% 72%;
+
+    --status-overdue-bg: 0 50% 15%;
+    --status-overdue-foreground: 0 85% 75%;
+
+    --status-missed-bg: 240 10% 16%;
+    --status-missed-foreground: 240 10% 75%;
+
+    --status-catchup-bg: 35 60% 14%;
+    --status-catchup-foreground: 40 90% 70%;
+
+    --status-review-bg: 260 50% 16%;
+    --status-review-foreground: 265 90% 80%;
+  }
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-#root {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
 }

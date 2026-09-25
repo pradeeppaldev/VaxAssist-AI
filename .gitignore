@@ -64,4 +64,5 @@ lerna-debug.log*
 
 # Vector & DB data
 chroma_db/
-data/
+/data/
+!frontend/src/data/

@@ -3,8 +3,53 @@ import { authApi } from '../services/api';
 
 const AuthContext = createContext(null);
 
+const DEMO_ACCOUNTS = {
+  'admin@vaxassist.ai': {
+    id: 'USR-1004',
+    name: 'Pradeep Pal (Lead Administrator)',
+    email: 'admin@vaxassist.ai',
+    role: 'ADMIN',
+    account_status: 'ACTIVE',
+  },
+  'doctor@vaxassist.ai': {
+    id: 'USR-1001',
+    name: 'Dr. Priya Sharma',
+    email: 'priya.sharma@apollohealth.org',
+    role: 'HEALTHCARE_WORKER',
+    account_status: 'ACTIVE',
+  },
+  'priya.sharma@apollohealth.org': {
+    id: 'USR-1001',
+    name: 'Dr. Priya Sharma',
+    email: 'priya.sharma@apollohealth.org',
+    role: 'HEALTHCARE_WORKER',
+    account_status: 'ACTIVE',
+  },
+  'patient@vaxassist.ai': {
+    id: 'USR-1002',
+    name: 'Rajesh Verma',
+    email: 'rajesh.verma@gmail.com',
+    role: 'PATIENT',
+    account_status: 'ACTIVE',
+  },
+  'rajesh.verma@gmail.com': {
+    id: 'USR-1002',
+    name: 'Rajesh Verma',
+    email: 'rajesh.verma@gmail.com',
+    role: 'PATIENT',
+    account_status: 'ACTIVE',
+  },
+};
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('vaxassist_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [token, setToken] = useState(() => localStorage.getItem('vaxassist_token'));
   const [isLoading, setIsLoading] = useState(true);
 
@@ -17,22 +62,53 @@ export function AuthProvider({ children }) {
         return;
       }
 
+      // If this is a demo offline token, restore cached user
+      if (storedToken.startsWith('demo_token_')) {
+        try {
+          const cachedUser = JSON.parse(localStorage.getItem('vaxassist_user') || 'null');
+          if (cachedUser) {
+            setUser(cachedUser);
+            setIsLoading(false);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       try {
         const response = await authApi.getMe();
         if (response && response.data) {
           setUser(response.data);
+          localStorage.setItem('vaxassist_user', JSON.stringify(response.data));
           setToken(storedToken);
         } else {
-          // Token expired or invalid
-          localStorage.removeItem('vaxassist_token');
-          setToken(null);
-          setUser(null);
+          // Check if cached user exists
+          const cachedUser = JSON.parse(localStorage.getItem('vaxassist_user') || 'null');
+          if (cachedUser) {
+            setUser(cachedUser);
+          } else {
+            localStorage.removeItem('vaxassist_token');
+            localStorage.removeItem('vaxassist_user');
+            setToken(null);
+            setUser(null);
+          }
         }
       } catch (err) {
-        console.warn('Failed to restore session:', err.message);
-        localStorage.removeItem('vaxassist_token');
-        setToken(null);
-        setUser(null);
+        // In frontend-only or offline mode, retain cached demo user
+        try {
+          const cachedUser = JSON.parse(localStorage.getItem('vaxassist_user') || 'null');
+          if (cachedUser) {
+            setUser(cachedUser);
+          } else {
+            localStorage.removeItem('vaxassist_token');
+            localStorage.removeItem('vaxassist_user');
+            setToken(null);
+            setUser(null);
+          }
+        } catch {
+          setUser(null);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -49,10 +125,23 @@ export function AuthProvider({ children }) {
       const userData = res.user;
 
       localStorage.setItem('vaxassist_token', accessToken);
+      localStorage.setItem('vaxassist_user', JSON.stringify(userData));
       setToken(accessToken);
       setUser(userData);
       return { success: true, user: userData };
     } catch (error) {
+      // Offline / Demo fallback for simulated testing
+      const normalizedEmail = email.trim().toLowerCase();
+      const demoAccount = DEMO_ACCOUNTS[normalizedEmail];
+      if (demoAccount) {
+        const demoToken = `demo_token_${demoAccount.role.toLowerCase()}`;
+        localStorage.setItem('vaxassist_token', demoToken);
+        localStorage.setItem('vaxassist_user', JSON.stringify(demoAccount));
+        setToken(demoToken);
+        setUser(demoAccount);
+        return { success: true, user: demoAccount };
+      }
+
       return { success: false, error: error.message || 'Login failed' };
     } finally {
       setIsLoading(false);
@@ -80,6 +169,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem('vaxassist_token');
+    localStorage.removeItem('vaxassist_user');
     setToken(null);
     setUser(null);
   }, []);

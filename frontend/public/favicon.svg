@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <!-- Medical Shield Outer Contour (Cyan) -->
+  <path d="M58 12C36 17 26 25 24 38C22 58 31 82 56 102C57.3 103 58.7 103 60 102C63 99.5 66 97 69 94" 
+        stroke="#15C2D9" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Inner Shield Accent Line -->
+  <path d="M34 40C33 55 40 73 58 87" 
+        stroke="#15C2D9" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+
+  <!-- Medical Cross in Center (Cyan) -->
+  <path d="M50 38H62C63.1 38 64 38.9 64 40V48H72C73.1 48 74 48.9 74 50V62C74 63.1 73.1 64 72 64H64V72C64 73.1 63.1 74 62 74H50C48.9 74 48 73.1 48 72V64H40C38.9 64 38 63.1 38 62V50C38 48.9 38.9 48 40 48H48V40C48 38.9 48.9 38 50 38Z" 
+        fill="#15C2D9"/>
+
+  <!-- Human Figure Head (Navy) -->
+  <circle cx="77" cy="28" r="7.5" fill="#1F2C49"/>
+
+  <!-- Human Figure Body / Right Shield Flank (Navy) -->
+  <path d="M64 33C71 34 76 39 80 47C83 54 84 64 77 75C73 82 66 89 58 95C67 85 75 75 77 65C79 55 76 43 64 33Z" 
+        fill="#1F2C49"/>
+
+  <!-- AI Circuit Traces & Nodes (Cyan) -->
+  <!-- Top Trace & Node -->
+  <path d="M82 45C86 44 91 42 94 38H98" stroke="#15C2D9" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="102" cy="38" r="4.5" fill="#15C2D9"/>
+
+  <!-- Middle Trace & Node -->
+  <path d="M84 56C89 56 94 54 99 50H106" stroke="#15C2D9" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="110" cy="50" r="4.5" fill="#15C2D9"/>
+
+  <!-- Bottom Trace & Node -->
+  <path d="M81 68C85 69 90 69 94 65L98 62" stroke="#15C2D9" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="102" cy="59" r="4.5" fill="#15C2D9"/>
+</svg>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { 
   UserPlus, 
   User, 
@@ -14,6 +14,13 @@ import {
   Building2, 
   BadgeCheck 
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent } from '@/components/ui/card';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { BrandLogo } from '@/components/common/BrandLogo';
+import { cn } from '@/lib/utils';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -77,256 +84,264 @@ export default function RegisterPage() {
 
   if (successInfo) {
     return (
-      <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-4">
+      <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <Card className="w-full max-w-md border-border bg-card p-8 text-center shadow-sm space-y-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-status-completed/10 text-status-completed mb-2">
             <CheckCircle2 className="h-8 w-8" />
           </div>
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-2xl sm:text-3xl font-bold text-foreground font-sans">
             {successInfo.role === 'HEALTHCARE_WORKER' ? 'Registration Submitted!' : 'Registration Complete!'}
           </h2>
-          <p className="mt-3 text-sm text-slate-600 leading-relaxed">
+          <p className="text-sm text-muted-foreground leading-relaxed">
             {successInfo.message}
           </p>
 
           {successInfo.role === 'HEALTHCARE_WORKER' && (
-            <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800 text-left">
-              <strong>Account Status: PENDING</strong>
-              <p className="mt-1">
-                Your medical credentials are in the Admin verification queue. Once an administrator approves your account, you will be able to log in.
+            <div className="rounded-xl bg-status-catchup-bg border border-status-catchup/30 p-4 text-xs sm:text-sm text-status-catchup-fg text-left space-y-1">
+              <strong>Account Status: PENDING VERIFICATION</strong>
+              <p className="leading-relaxed">
+                Your medical credentials have been forwarded to the Admin verification queue. Once approved, your clinical portal access will be unlocked.
               </p>
             </div>
           )}
 
-          <div className="mt-6 flex flex-col gap-3">
-            <Link
-              to="/login"
-              className="inline-flex w-full items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition"
-            >
-              Proceed to Sign In
-            </Link>
-            <Link
-              to="/"
-              className="text-xs text-slate-500 hover:text-slate-800"
-            >
+          <div className="pt-2 flex flex-col gap-3">
+            <Button asChild variant="cyan" size="lg" className="w-full font-semibold">
+              <Link to="/login">Proceed to Sign In</Link>
+            </Button>
+            <Link to="/" className="text-xs sm:text-sm text-muted-foreground hover:text-foreground">
               Back to Home
             </Link>
           </div>
-        </div>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-lg space-y-6">
-        {/* Header */}
-        <div className="text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white shadow-md">
-            <UserPlus className="h-6 w-6" />
+        
+        {/* Header with Brand Logo */}
+        <div className="text-center space-y-3 flex flex-col items-center">
+          <Link to="/" className="inline-block hover:opacity-95 transition-opacity">
+            <BrandLogo size="lg" />
+          </Link>
+          <div className="space-y-1">
+            <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground font-sans">
+              Create an Account
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Select your account type and begin managing verified immunization records
+            </p>
           </div>
-          <h2 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-900">
-            Create an Account
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Select your account type and begin managing digital vaccination records
-          </p>
         </div>
 
         {/* Error Alert */}
         {error && (
-          <div className="flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800 animate-in fade-in">
-            <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="font-medium">Registration Error</p>
-              <p className="text-xs text-rose-700 mt-0.5">{error}</p>
-            </div>
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Registration Error</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
         )}
 
         {/* Form Card */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Account Type Selector */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-2">
-                I am registering as:
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRole('PATIENT')}
-                  className={`flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition ${
-                    role === 'PATIENT'
-                      ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-1 ring-blue-600'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                  }`}
-                >
-                  <Users className={`h-5 w-5 mb-1.5 ${role === 'PATIENT' ? 'text-blue-600' : 'text-slate-400'}`} />
-                  <span className="text-xs font-bold">Patient / Family</span>
-                  <span className="text-[10px] text-slate-500 mt-0.5">Instant Active Access</span>
-                </button>
+        <Card className="border-border bg-card shadow-sm">
+          <CardContent className="p-6 sm:p-8">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              
+              {/* Account Type Selector */}
+              <div className="space-y-2">
+                <Label className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  I am registering as:
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setRole('PATIENT')}
+                    className={cn(
+                      "flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition cursor-pointer",
+                      role === 'PATIENT'
+                        ? "border-primary bg-primary/10 text-primary font-bold shadow-2xs"
+                        : "border-border bg-card text-muted-foreground hover:border-border/80 hover:bg-muted/50"
+                    )}
+                  >
+                    <Users className="h-5 w-5 mb-1" />
+                    <span className="text-xs sm:text-sm">Family / Caregiver</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setRole('HEALTHCARE_WORKER')}
-                  className={`flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition ${
-                    role === 'HEALTHCARE_WORKER'
-                      ? 'border-blue-600 bg-blue-50/70 text-blue-900 ring-1 ring-blue-600'
-                      : 'border-slate-200 hover:border-slate-300 text-slate-600'
-                  }`}
-                >
-                  <Stethoscope className={`h-5 w-5 mb-1.5 ${role === 'HEALTHCARE_WORKER' ? 'text-blue-600' : 'text-slate-400'}`} />
-                  <span className="text-xs font-bold">Healthcare Worker</span>
-                  <span className="text-[10px] text-slate-500 mt-0.5">Requires Approval</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Name */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-                Full Name
-              </label>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <User className="h-4 w-4" />
+                  <button
+                    type="button"
+                    onClick={() => setRole('HEALTHCARE_WORKER')}
+                    className={cn(
+                      "flex flex-col items-center justify-center p-3.5 rounded-xl border text-center transition cursor-pointer",
+                      role === 'HEALTHCARE_WORKER'
+                        ? "border-primary bg-primary/10 text-primary font-bold shadow-2xs"
+                        : "border-border bg-card text-muted-foreground hover:border-border/80 hover:bg-muted/50"
+                    )}
+                  >
+                    <Stethoscope className="h-5 w-5 mb-1" />
+                    <span className="text-xs sm:text-sm">Healthcare Worker</span>
+                  </button>
                 </div>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Dr. John Doe or Jane Smith"
-                  className="block w-full rounded-lg border border-slate-300 pl-10 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 transition"
-                />
               </div>
-            </div>
 
-            {/* Email */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-                Email Address
-              </label>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                  <Mail className="h-4 w-4" />
-                </div>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="block w-full rounded-lg border border-slate-300 pl-10 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 transition"
-                />
-              </div>
-            </div>
-
-            {/* Healthcare Worker Specific Fields */}
-            {role === 'HEALTHCARE_WORKER' && (
-              <div className="space-y-4 rounded-xl border border-blue-100 bg-blue-50/40 p-4">
-                <div className="flex items-center gap-2 text-xs font-bold text-blue-900">
-                  <BadgeCheck className="h-4 w-4 text-blue-600" />
-                  <span>Professional Credentials</span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Medical License Number <span className="text-rose-500">*</span>
-                  </label>
-                  <input
+              {/* Full Name */}
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-muted-foreground">
+                  Full Name
+                </Label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted-foreground">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <Input
+                    id="name"
                     type="text"
                     required
-                    value={licenseNumber}
-                    onChange={(e) => setLicenseNumber(e.target.value)}
-                    placeholder="e.g. MED-849201"
-                    className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 transition bg-white"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={role === 'HEALTHCARE_WORKER' ? 'Dr. Ananya Roy' : 'Priya Sharma'}
+                    className="pl-10 h-11 text-sm"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-                    Clinic / Hospital Affiliation (Optional)
-                  </label>
-                  <div className="relative">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                      <Building2 className="h-4 w-4" />
+              {/* Email */}
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-muted-foreground">
+                  Email Address
+                </Label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted-foreground">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="name@example.com"
+                    className="pl-10 h-11 text-sm"
+                  />
+                </div>
+              </div>
+
+              {/* Healthcare-specific fields */}
+              {role === 'HEALTHCARE_WORKER' && (
+                <div className="p-4 rounded-xl border border-border bg-muted/40 space-y-3.5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="licenseNumber" className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-muted-foreground flex items-center justify-between">
+                      <span>Medical License Number</span>
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted-foreground">
+                        <BadgeCheck className="h-4 w-4" />
+                      </div>
+                      <Input
+                        id="licenseNumber"
+                        type="text"
+                        required
+                        value={licenseNumber}
+                        onChange={(e) => setLicenseNumber(e.target.value)}
+                        placeholder="e.g. MCI-2021-998811"
+                        className="pl-10 h-11 text-sm"
+                      />
                     </div>
-                    <input
-                      type="text"
-                      value={clinicOrHospital}
-                      onChange={(e) => setClinicOrHospital(e.target.value)}
-                      placeholder="e.g. City Central Hospital"
-                      className="block w-full rounded-lg border border-slate-300 pl-10 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 transition bg-white"
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="clinicOrHospital" className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-muted-foreground">
+                      Clinic or Hospital Affiliation (Optional)
+                    </Label>
+                    <div className="relative">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted-foreground">
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <Input
+                        id="clinicOrHospital"
+                        type="text"
+                        value={clinicOrHospital}
+                        onChange={(e) => setClinicOrHospital(e.target.value)}
+                        placeholder="City Children's Hospital"
+                        className="pl-10 h-11 text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Password */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="password" className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-muted-foreground">
+                    Password
+                  </Label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted-foreground">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <Input
+                      id="password"
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pl-10 h-11 text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPassword" className="text-xs sm:text-sm uppercase tracking-wider font-semibold text-muted-foreground">
+                    Confirm Password
+                  </Label>
+                  <div className="relative">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-muted-foreground">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="pl-10 h-11 text-sm"
                     />
                   </div>
                 </div>
               </div>
-            )}
 
-            {/* Password & Confirm Password */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                    <Lock className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Min 8 characters"
-                    className="block w-full rounded-lg border border-slate-300 pl-10 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 transition"
-                  />
-                </div>
-              </div>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                variant="cyan"
+                className="w-full font-semibold gap-2 mt-2 h-11 text-base shadow-xs"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  <span>
+                    {role === 'HEALTHCARE_WORKER' ? 'Submit for Clinical Verification' : 'Create Free Account'}
+                  </span>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
 
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                    <Lock className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter password"
-                    className="block w-full rounded-lg border border-slate-300 pl-10 pr-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 transition"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:opacity-50 transition"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Creating Account...</span>
-                </>
-              ) : (
-                <span>Register Account</span>
-              )}
-            </button>
-          </form>
-        </div>
-
-        {/* Footer Link */}
-        <p className="text-center text-sm text-slate-600">
+        {/* Footer */}
+        <p className="text-center text-sm text-muted-foreground">
           Already have an account?{' '}
-          <Link to="/login" className="font-semibold text-blue-600 hover:text-blue-700 hover:underline">
+          <Link to="/login" className="font-semibold text-primary hover:underline">
             Sign In
           </Link>
         </p>
