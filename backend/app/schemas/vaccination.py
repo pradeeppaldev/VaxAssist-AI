@@ -99,6 +99,8 @@ class ScheduledDoseResponse(BaseModel):
     condition_description: Optional[str] = None
     source_guideline: Optional[str] = None
     notes: Optional[str] = None
+    catch_up_notes: Optional[str] = None
+    clinical_review_notes: Optional[str] = None
 
 
 class MemberScheduleSummary(BaseModel):
@@ -108,6 +110,8 @@ class MemberScheduleSummary(BaseModel):
     overdue_count: int
     upcoming_count: int
     missed_count: int = 0
+    catch_up_count: int = 0
+    clinical_review_count: int = 0
     completion_percentage: float
 
 

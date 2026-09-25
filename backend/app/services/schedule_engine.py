@@ -90,6 +90,8 @@ def calculate_member_schedule(
     overdue_count = 0
     upcoming_count = 0
     missed_count = 0
+    catch_up_count = 0
+    clinical_review_count = 0
 
     # Map rule codes to matched administered records to calculate subsequent intervals
     completed_rule_records: Dict[str, Dict[str, Any]] = {}
@@ -120,63 +122,99 @@ def calculate_member_schedule(
             record_id = None
             adm_date = None
 
-            # 1. Check strict expiration / missed window
-            is_missed = False
-            missed_reason = ""
+            # Calculate interval constraints from previous dose if required
+            prev_req = rule.get("previous_dose_required")
+            min_interval_days = rule.get("minimum_interval_days") or 0
 
+            prev_adm_date = None
+            if prev_req:
+                # prev_req can be a code string or tuple (code, dose)
+                if isinstance(prev_req, str) and prev_req.upper() in completed_rule_records:
+                    prev_adm_date = completed_rule_records[prev_req.upper()]["administered_date"]
+                elif isinstance(prev_req, tuple):
+                    req_code, req_dose = prev_req
+                    for k, v in completed_rule_records.items():
+                        if (k == req_code.upper() or v.get("vaccine_code") == req_code.upper()) and v.get("dose_number") == req_dose:
+                            prev_adm_date = v["administered_date"]
+                            break
+
+            min_age_days = rule.get("minimum_age_days")
+            min_age_date = date_of_birth + timedelta(days=min_age_days) if min_age_days else recommended_date
+
+            if prev_adm_date and min_interval_days > 0:
+                interval_due_date = prev_adm_date + timedelta(days=min_interval_days)
+                calculated_due_date = max(recommended_date, interval_due_date, min_age_date)
+            else:
+                calculated_due_date = max(recommended_date, min_age_date)
+
+            # 1. Strict permanent expiration / missed window where specifically indicated by source:
             # Hepatitis B birth dose (< 24 hours)
             if rule_code == "HEPB_BIRTH" or (rule_series == "HEPB" and dose_number == 1 and "Birth" in rule.get("dose_name", "")):
                 if reference_date > date_of_birth + timedelta(days=1):
-                    is_missed = True
-                    missed_reason = (
+                    status = VaccinationStatus.MISSED
+                    status_reason = (
                         "Missed birth dose window (target: strictly within 24 hours of birth). "
                         "Hepatitis B protection will be administered via Pentavalent combination starting at 6 weeks."
                     )
+                    missed_count += 1
+                elif reference_date < calculated_due_date:
+                    status = VaccinationStatus.UPCOMING
+                    status_reason = f"Upcoming: scheduled for birth delivery ({rule['recommended_age_display']})"
+                    upcoming_count += 1
+                else:
+                    status = VaccinationStatus.DUE
+                    status_reason = "Currently due at birth (within 24 hours of delivery)"
+                    due_count += 1
+
             # OPV Zero dose (< 15 days)
             elif rule_code == "OPV_0" or (rule_series == "OPV" and dose_number == 1 and "Zero" in rule.get("dose_name", "")):
                 if reference_date > date_of_birth + timedelta(days=15):
-                    is_missed = True
-                    missed_reason = (
+                    status = VaccinationStatus.MISSED
+                    status_reason = (
                         "Missed birth dose window (target: within 15 days of birth). "
                         "Routine polio vaccination begins at 6 weeks with OPV-1 and fIPV-1."
                     )
-            # General upper age cutoff
-            elif rule.get("max_age_days") and reference_date > date_of_birth + timedelta(days=rule["max_age_days"]):
-                is_missed = True
-                missed_reason = (
-                    f"Age exceeds maximum upper cutoff ({rule['max_age_days']} days). "
-                    "Clinical evaluation required for alternative catch-up protocol."
-                )
-
-            if is_missed:
-                status = VaccinationStatus.MISSED
-                status_reason = missed_reason
-                calculated_due_date = recommended_date
-                missed_count += 1
-            else:
-                # 2. Calculate interval constraints from previous dose if required
-                prev_req = rule.get("previous_dose_required")
-                min_interval_days = rule.get("minimum_interval_days") or 0
-
-                prev_adm_date = None
-                if prev_req:
-                    # prev_req can be a code string or tuple (code, dose)
-                    if isinstance(prev_req, str) and prev_req.upper() in completed_rule_records:
-                        prev_adm_date = completed_rule_records[prev_req.upper()]["administered_date"]
-                    elif isinstance(prev_req, tuple):
-                        req_code, req_dose = prev_req
-                        for k, v in completed_rule_records.items():
-                            if (k == req_code.upper() or v.get("vaccine_code") == req_code.upper()) and v.get("dose_number") == req_dose:
-                                prev_adm_date = v["administered_date"]
-                                break
-
-                if prev_adm_date and min_interval_days > 0:
-                    interval_due_date = prev_adm_date + timedelta(days=min_interval_days)
-                    calculated_due_date = max(recommended_date, interval_due_date)
+                    missed_count += 1
+                elif reference_date < calculated_due_date:
+                    status = VaccinationStatus.UPCOMING
+                    status_reason = f"Upcoming: scheduled for birth delivery ({rule['recommended_age_display']})"
+                    upcoming_count += 1
                 else:
-                    calculated_due_date = recommended_date
+                    status = VaccinationStatus.DUE
+                    status_reason = "Currently due at birth (within 15 days of delivery)"
+                    due_count += 1
 
-                # 3. Determine status based on reference date
+            # Rotavirus vaccine (< 1 year) - cannot be initiated or continued past 1 year of age
+            elif (rule_series == "ROTA" or "ROTA" in rule_code) and reference_date > date_of_birth + timedelta(days=365):
+                status = VaccinationStatus.MISSED
+                status_reason = (
+                    "Rotavirus vaccination window expired (> 1 year of age). Under UIP/WHO guidelines, "
+                    "rotavirus vaccine is not initiated or administered after 1 year."
+                )
+                missed_count += 1
+
+            # 2. Check if age exceeds routine maximum age:
+            elif rule.get("max_age_days") and reference_date > date_of_birth + timedelta(days=rule["max_age_days"]):
+                can_catch_up = rule.get("can_catch_up", False)
+                catch_up_max = rule.get("catch_up_max_age_days")
+
+                if can_catch_up and (catch_up_max is None or reference_date <= date_of_birth + timedelta(days=catch_up_max)):
+                    status = VaccinationStatus.CATCH_UP_REQUIRED
+                    status_reason = rule.get(
+                        "catch_up_notes",
+                        f"Routine age exceeded ({rule['max_age_days']} days). Catch-up vaccination protocol is required as per official guidelines."
+                    )
+                    catch_up_count += 1
+                else:
+                    status = VaccinationStatus.CLINICAL_REVIEW
+                    status_reason = rule.get(
+                        "clinical_review_notes",
+                        f"Age exceeds routine administration cutoff ({rule['max_age_days']} days). Clinical evaluation required by healthcare provider for alternative protocol."
+                    )
+                    clinical_review_count += 1
+
+            # 3. Standard routine schedule evaluation (UPCOMING / DUE / OVERDUE)
+            else:
                 due_window = timedelta(days=rule.get("due_window_days", 7))
                 grace_period = timedelta(days=rule.get("grace_period_days", 30))
 
@@ -222,6 +260,8 @@ def calculate_member_schedule(
             "previous_dose_required": rule.get("previous_dose_required"),
             "minimum_interval_days": rule.get("minimum_interval_days"),
             "notes": rule.get("notes"),
+            "catch_up_notes": rule.get("catch_up_notes"),
+            "clinical_review_notes": rule.get("clinical_review_notes"),
         })
 
     # Sort schedule chronologically by calculated due date, then dose number
@@ -240,6 +280,8 @@ def calculate_member_schedule(
             "overdue_count": overdue_count,
             "upcoming_count": upcoming_count,
             "missed_count": missed_count,
+            "catch_up_count": catch_up_count,
+            "clinical_review_count": clinical_review_count,
             "completion_percentage": completion_percentage,
         },
         "schedule_items": schedule_items,

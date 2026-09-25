@@ -17,6 +17,8 @@ class VaccinationStatus(str, Enum):
     COMPLETED = "COMPLETED"
     OVERDUE = "OVERDUE"
     MISSED = "MISSED"
+    CATCH_UP_REQUIRED = "CATCH_UP_REQUIRED"
+    CLINICAL_REVIEW = "CLINICAL_REVIEW"
 
 
 class VaccinationRecord(MongoBaseModel):

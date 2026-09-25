@@ -531,6 +531,20 @@ export default function PatientDashboard() {
             <span>Completed</span>
           </span>
         );
+      case 'CATCH_UP_REQUIRED':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+            <Clock className="h-3.5 w-3.5 text-amber-600" />
+            <span>Catch-Up Needed</span>
+          </span>
+        );
+      case 'CLINICAL_REVIEW':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-300">
+            <AlertCircle className="h-3.5 w-3.5 text-purple-600" />
+            <span>Clinical Review</span>
+          </span>
+        );
       case 'MISSED':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-700 border border-zinc-300">
@@ -547,8 +561,8 @@ export default function PatientDashboard() {
         );
       case 'DUE':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Clock className="h-3.5 w-3.5 text-amber-600" />
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            <Clock className="h-3.5 w-3.5 text-blue-600" />
             <span>Due Now</span>
           </span>
         );
@@ -567,8 +581,9 @@ export default function PatientDashboard() {
   const scheduleItems = scheduleData?.schedule_items || [];
   const filteredScheduleItems = scheduleItems.filter((item) => {
     // Status filter
-    if (statusFilter === 'ACTION_NEEDED' && item.status !== 'DUE' && item.status !== 'OVERDUE') return false;
+    if (statusFilter === 'ACTION_NEEDED' && !['DUE', 'OVERDUE', 'CATCH_UP_REQUIRED', 'CLINICAL_REVIEW'].includes(item.status)) return false;
     if (statusFilter === 'COMPLETED' && item.status !== 'COMPLETED') return false;
+    if (statusFilter === 'CATCH_UP' && !['CATCH_UP_REQUIRED', 'CLINICAL_REVIEW'].includes(item.status)) return false;
     if (statusFilter === 'MISSED' && item.status !== 'MISSED') return false;
     if (statusFilter === 'UPCOMING' && item.status !== 'UPCOMING') return false;
 
@@ -923,76 +938,88 @@ export default function PatientDashboard() {
           )}
 
           {/* Metric Stats Cards Banner */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
             {/* Total Required */}
-            <div className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-xs">
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Total</span>
                 <Layers className="h-4 w-4 text-slate-400" />
               </div>
-              <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-slate-900">{summary.total_doses}</span>
-                <span className="text-[11px] text-slate-400">Doses</span>
+              <div className="mt-1.5 flex items-baseline gap-1">
+                <span className="text-xl font-black text-slate-900">{summary.total_doses}</span>
+                <span className="text-[10px] text-slate-400">Doses</span>
               </div>
             </div>
 
             {/* Completed */}
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3.5 shadow-xs">
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-3 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">Completed</span>
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               </div>
-              <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-emerald-700">{summary.completed_count}</span>
-                <span className="text-[11px] text-emerald-600">({summary.completion_percentage}%)</span>
+              <div className="mt-1.5 flex items-baseline gap-1">
+                <span className="text-xl font-black text-emerald-700">{summary.completed_count}</span>
+                <span className="text-[10px] text-emerald-600">({summary.completion_percentage}%)</span>
               </div>
             </div>
 
             {/* Due Now */}
-            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3.5 shadow-xs">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/60 p-3 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Due Now</span>
-                <Clock className="h-4 w-4 text-amber-600" />
+                <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider">Due Now</span>
+                <Clock className="h-4 w-4 text-blue-600" />
               </div>
-              <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-amber-700">{summary.due_count}</span>
-                <span className="text-[11px] text-amber-600 font-medium">Ready</span>
+              <div className="mt-1.5 flex items-baseline gap-1">
+                <span className="text-xl font-black text-blue-700">{summary.due_count}</span>
+                <span className="text-[10px] text-blue-600 font-medium">Ready</span>
               </div>
             </div>
 
             {/* Overdue */}
-            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3.5 shadow-xs">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-3 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-rose-800 uppercase tracking-wider">Overdue</span>
                 <AlertTriangle className="h-4 w-4 text-rose-600" />
               </div>
-              <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-rose-700">{summary.overdue_count}</span>
-                <span className="text-[11px] text-rose-600 font-medium">Urgent</span>
+              <div className="mt-1.5 flex items-baseline gap-1">
+                <span className="text-xl font-black text-rose-700">{summary.overdue_count}</span>
+                <span className="text-[10px] text-rose-600 font-medium">Urgent</span>
+              </div>
+            </div>
+
+            {/* Catch-Up / Review */}
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-3 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-amber-800 uppercase tracking-wider">Catch-Up</span>
+                <Clock className="h-4 w-4 text-amber-600" />
+              </div>
+              <div className="mt-1.5 flex items-baseline gap-1">
+                <span className="text-xl font-black text-amber-700">{(summary.catch_up_count || 0) + (summary.clinical_review_count || 0)}</span>
+                <span className="text-[10px] text-amber-600 font-medium">Protocol</span>
               </div>
             </div>
 
             {/* Missed Window */}
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3.5 shadow-xs">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-semibold text-zinc-700 uppercase tracking-wider">Missed</span>
                 <AlertCircle className="h-4 w-4 text-zinc-500" />
               </div>
-              <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-zinc-800">{summary.missed_count || 0}</span>
-                <span className="text-[11px] text-zinc-500">Expired</span>
+              <div className="mt-1.5 flex items-baseline gap-1">
+                <span className="text-xl font-black text-zinc-800">{summary.missed_count || 0}</span>
+                <span className="text-[10px] text-zinc-500">Expired</span>
               </div>
             </div>
 
             {/* Upcoming */}
-            <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-3.5 shadow-xs">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3 shadow-xs">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-blue-800 uppercase tracking-wider">Upcoming</span>
-                <Calendar className="h-4 w-4 text-blue-600" />
+                <span className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider">Upcoming</span>
+                <Calendar className="h-4 w-4 text-slate-500" />
               </div>
-              <div className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="text-2xl font-black text-blue-700">{summary.upcoming_count}</span>
-                <span className="text-[11px] text-blue-600">Future</span>
+              <div className="mt-1.5 flex items-baseline gap-1">
+                <span className="text-xl font-black text-slate-700">{summary.upcoming_count}</span>
+                <span className="text-[10px] text-slate-500">Future</span>
               </div>
             </div>
           </div>
@@ -1096,9 +1123,10 @@ export default function PatientDashboard() {
                 <div className="flex items-center gap-1 flex-wrap">
                   {[
                     { key: 'ALL', label: 'All' },
-                    { key: 'ACTION_NEEDED', label: 'Due / Overdue' },
+                    { key: 'ACTION_NEEDED', label: 'Action Needed' },
                     { key: 'COMPLETED', label: 'Completed' },
-                    { key: 'MISSED', label: 'Missed' },
+                    { key: 'CATCH_UP', label: 'Catch-Up / Review' },
+                    { key: 'MISSED', label: 'Missed Window' },
                     { key: 'UPCOMING', label: 'Upcoming' },
                   ].map((f) => (
                     <button
@@ -1139,6 +1167,8 @@ export default function PatientDashboard() {
                     const isMissed = item.status === 'MISSED';
                     const isOverdue = item.status === 'OVERDUE';
                     const isDue = item.status === 'DUE';
+                    const isCatchUp = item.status === 'CATCH_UP_REQUIRED';
+                    const isReview = item.status === 'CLINICAL_REVIEW';
 
                     return (
                       <div
@@ -1146,10 +1176,14 @@ export default function PatientDashboard() {
                         className={`rounded-2xl border p-5 bg-white shadow-xs transition flex flex-col justify-between ${
                           isMissed
                             ? 'border-zinc-300 bg-zinc-50/60'
+                            : isCatchUp
+                            ? 'border-amber-300 ring-1 ring-amber-200 bg-amber-50/20'
+                            : isReview
+                            ? 'border-purple-300 ring-1 ring-purple-200 bg-purple-50/20'
                             : isOverdue
                             ? 'border-rose-300 ring-1 ring-rose-200 bg-rose-50/20'
                             : isDue
-                            ? 'border-amber-300 ring-1 ring-amber-200 bg-amber-50/20'
+                            ? 'border-blue-300 ring-1 ring-blue-200 bg-blue-50/20'
                             : isCompleted
                             ? 'border-emerald-200 bg-emerald-50/10'
                             : 'border-slate-200'
@@ -1267,13 +1301,25 @@ export default function PatientDashboard() {
                                   ? 'bg-zinc-200 text-zinc-800 hover:bg-zinc-300'
                                   : isOverdue
                                   ? 'bg-rose-600 text-white hover:bg-rose-700'
-                                  : isDue
+                                  : isCatchUp
                                   ? 'bg-amber-600 text-white hover:bg-amber-700'
+                                  : isReview
+                                  ? 'bg-purple-600 text-white hover:bg-purple-700'
+                                  : isDue
+                                  ? 'bg-blue-600 text-white hover:bg-blue-700'
                                   : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
                               }`}
                             >
                               <Plus className="h-3.5 w-3.5" />
-                              <span>{isMissed ? 'Record Retroactively' : `Record Dose ${item.dose_number}`}</span>
+                              <span>
+                                {isMissed
+                                  ? 'Record Retroactively'
+                                  : isCatchUp
+                                  ? 'Record Catch-Up Dose'
+                                  : isReview
+                                  ? 'Record Post-Evaluation'
+                                  : `Record Dose ${item.dose_number}`}
+                              </span>
                             </button>
                           )}
                         </div>

@@ -33,6 +33,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_display": "At Birth",
         "minimum_age_days": 0,
         "max_age_days": 365,  # Can be given up to 1 year of age when missed
+        "can_catch_up": False,
+        "catch_up_max_age_days": None,
+        "clinical_review_notes": "Exceeds routine UIP limit of 1 year. Under NTEP/MoHFW guidelines, clinical evaluation and Mantoux tuberculin test are required prior to considering BCG vaccination.",
         "minimum_interval_days": None,
         "previous_dose_required": None,
         "due_window_days": 0,
@@ -61,6 +64,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_display": "At Birth (within 24 hours)",
         "minimum_age_days": 0,
         "max_age_days": 1,  # Strictly within 24 hours
+        "can_catch_up": False,
+        "is_strictly_missed_past_window": True,
         "minimum_interval_days": None,
         "previous_dose_required": None,
         "due_window_days": 0,
@@ -89,6 +94,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_display": "At Birth (within 15 days)",
         "minimum_age_days": 0,
         "max_age_days": 15,  # Within first 15 days
+        "can_catch_up": False,
+        "is_strictly_missed_past_window": True,
         "minimum_interval_days": None,
         "previous_dose_required": None,
         "due_window_days": 0,
@@ -128,6 +135,10 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "First primary OPV dose at 6 weeks. Can be given till 5 years of age.",
+        "can_catch_up": True,
+        "catch_up_max_age_days": 1825,
+        "catch_up_notes": "bOPV can be administered up to 5 years of age under UIP guidelines.",
+        "clinical_review_notes": "Exceeds 5 years of age. Routine bOPV is indicated up to 5 years; clinical evaluation required if polio series is incomplete.",
     },
 
     # 5. PENTAVALENT-1
@@ -156,6 +167,10 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Combines DTP, HepB, and Hib into a single 5-in-1 injection.",
+        "can_catch_up": True,
+        "catch_up_max_age_days": 2555,
+        "catch_up_notes": "Child has crossed 1 year of age. Under UIP guidelines, Pentavalent formulation is discontinued and catch-up immunization is administered using DPT (up to 7 years) and standalone Hepatitis B doses.",
+        "clinical_review_notes": "Child exceeds 7 years of age. DPT/Pentavalent cannot be administered; evaluate for adolescent Td or Tdap.",
     },
 
     # 6. ROTAVIRUS-1
@@ -184,6 +199,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Oral drops against rotavirus diarrhea. Standard UIP uses 3-dose schedule; formulation depends on product supplied.",
+        "can_catch_up": False,
+        "is_strictly_missed_past_window": True,
     },
 
     # 7. FRACTIONAL IPV-1 (fIPV-1)
@@ -212,6 +229,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Two drops of OPV plus fractional dose (0.1 mL intradermal) of IPV.",
+        "can_catch_up": False,
+        "clinical_review_notes": "Exceeds routine UIP infant schedule (< 1 year). Clinical evaluation required to verify polio immunity and complete coverage with bOPV (up to 5 years) or catch-up IPV.",
     },
 
     # 8. PCV-1
@@ -240,6 +259,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "First primary dose against invasive pneumococcal infection. Universal across India.",
+        "can_catch_up": False,
+        "clinical_review_notes": "Exceeds routine infant schedule (< 1 year). Clinical review required for high-risk pneumococcal indications.",
     },
 
     # 9. OPV-2
@@ -380,6 +401,10 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Third primary pentavalent dose. Completes primary infant series.",
+        "can_catch_up": True,
+        "catch_up_max_age_days": 2555,
+        "catch_up_notes": "Child has crossed 1 year of age. Under UIP guidelines, Pentavalent formulation is discontinued and catch-up immunization is administered using DPT (up to 7 years) and standalone Hepatitis B doses.",
+        "clinical_review_notes": "Child exceeds 7 years of age. DPT/Pentavalent cannot be administered; evaluate for adolescent Td or Tdap.",
     },
 
     # 14. ROTAVIRUS-3
@@ -408,6 +433,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Third rotavirus dose completing primary infant diarrhea protection.",
+        "can_catch_up": False,
+        "is_strictly_missed_past_window": True,
     },
 
     # 15. FRACTIONAL IPV-2 (fIPV-2)
@@ -436,6 +463,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Second fractional IPV dose at 14 weeks.",
+        "can_catch_up": False,
+        "clinical_review_notes": "Exceeds routine UIP infant schedule (< 1 year). Clinical evaluation required to verify polio immunity and complete coverage with bOPV (up to 5 years) or catch-up IPV.",
     },
 
     # 16. PCV-2
@@ -492,6 +521,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP (w.e.f. Jan 1, 2023)",
         "notes": "Introduced effective January 1, 2023 by MoHFW. Administered at 9 completed months with MR-1 to enhance mucosal and humoral polio immunity.",
+        "can_catch_up": False,
+        "clinical_review_notes": "Exceeds routine UIP infant schedule (< 1 year). Clinical evaluation required to verify polio immunity and complete coverage with bOPV (up to 5 years) or catch-up IPV.",
     },
 
     # 18. PCV BOOSTER
@@ -536,7 +567,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 270,
         "recommended_age_display": "9–12 Months",
         "minimum_age_days": 270,
-        "max_age_days": 1825,  # Can be given till 5 years
+        "max_age_days": 1825,  # Routine upper limit: 5 years
+        "can_catch_up": True,
+        "catch_up_max_age_days": 5475,  # Catch-up up to 15 years under MoHFW/WHO guidelines
         "minimum_interval_days": None,
         "previous_dose_required": None,
         "due_window_days": 14,
@@ -547,7 +580,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "target_disease": "Measles, Rubella",
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
-        "notes": "Government UIP provides MR (Measles-Rubella), NOT MMR. Given at 9 completed months to 12 months. Can be given till 5 years.",
+        "notes": "Government UIP provides MR (Measles-Rubella), NOT MMR. Given at 9 completed months to 12 months. Routine till 5 years, catch-up up to 15 years.",
+        "catch_up_notes": "Child has exceeded the routine 5-year UIP window. Under MoHFW and WHO India guidelines, MR catch-up vaccination can and should be administered up to 15 years of age.",
+        "clinical_review_notes": "Exceeds 15 years of age. Clinical evaluation required for adolescent/adult measles-rubella immunization.",
     },
 
     # 20. MR-2 (Measles-Rubella 2)
@@ -564,7 +599,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 480,
         "recommended_age_display": "16–24 Months",
         "minimum_age_days": 480,
-        "max_age_days": 1825,  # Can be given till 5 years
+        "max_age_days": 1825,  # Routine upper limit: 5 years
+        "can_catch_up": True,
+        "catch_up_max_age_days": 5475,  # Catch-up up to 15 years
         "minimum_interval_days": 28,
         "previous_dose_required": ("MR_1", 1),
         "due_window_days": 30,
@@ -575,7 +612,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "target_disease": "Measles, Rubella",
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
-        "notes": "Second MR dose at 16–24 months.",
+        "notes": "Second MR dose at 16–24 months. Routine till 5 years, catch-up up to 15 years.",
+        "catch_up_notes": "Child has exceeded the routine 5-year UIP window. Under MoHFW and WHO India guidelines, MR-2 catch-up vaccination can and should be administered up to 15 years of age.",
+        "clinical_review_notes": "Exceeds 15 years of age. Clinical evaluation required for adolescent/adult measles-rubella immunization.",
     },
 
     # 21. DPT BOOSTER-1
@@ -592,7 +631,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 480,
         "recommended_age_display": "16–24 Months",
         "minimum_age_days": 480,
-        "max_age_days": 2555,  # Upper limit: 7 years
+        "max_age_days": 2555,  # Routine upper limit: 7 years
+        "can_catch_up": True,
+        "catch_up_max_age_days": 5840,  # Catch-up with Td if >7 years
         "minimum_interval_days": 180,  # 6 months after Penta-3
         "previous_dose_required": ("PENTA_3", 3),
         "due_window_days": 30,
@@ -604,6 +645,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "First DPT booster following completion of primary pentavalent series. Can be given till 7 years.",
+        "catch_up_notes": "Child is older than 7 years. Whole-cell pertussis (wP) in DPT is contraindicated past 7 years; catch-up must be administered using adult Td or Tdap.",
+        "clinical_review_notes": "Exceeds 16 years. Clinical evaluation for adult Td/Tdap booster.",
     },
 
     # 22. OPV BOOSTER
@@ -620,7 +663,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 480,
         "recommended_age_display": "16–24 Months",
         "minimum_age_days": 480,
-        "max_age_days": 1825,
+        "max_age_days": 1825,  # Up to 5 years
+        "can_catch_up": True,
+        "catch_up_max_age_days": 1825,
         "minimum_interval_days": 180,
         "previous_dose_required": ("OPV_3", 4),
         "due_window_days": 30,
@@ -632,6 +677,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "OPV booster given alongside DPT Booster-1 at 16–24 months.",
+        "catch_up_notes": "bOPV booster can be administered up to 5 years of age.",
+        "clinical_review_notes": "Exceeds 5 years of age. Routine bOPV is indicated up to 5 years.",
     },
 
     # 23. DPT BOOSTER-2
@@ -649,6 +696,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_display": "5–6 Years",
         "minimum_age_days": 1825,
         "max_age_days": 2555,  # Upper limit: 7 years
+        "can_catch_up": True,
+        "catch_up_max_age_days": 5840,
         "minimum_interval_days": 365,
         "previous_dose_required": ("DPT_BOOSTER_1", 1),
         "due_window_days": 60,
@@ -660,6 +709,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Second DPT booster administered before school entry. Not given after 7 years of age (Td is used instead).",
+        "catch_up_notes": "Child is older than 7 years. Whole-cell pertussis (wP) in DPT is contraindicated past 7 years; catch-up must be administered using adult Td or Tdap.",
+        "clinical_review_notes": "Exceeds 16 years. Clinical evaluation for adult Td/Tdap booster.",
     },
 
     # 24. Td-10 (Tetanus & adult Diphtheria at 10 years)
@@ -676,7 +727,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 3650,
         "recommended_age_display": "10 Years",
         "minimum_age_days": 3650,
-        "max_age_days": 5840,
+        "max_age_days": None,  # Td has no upper age limit; adults can receive Td at any age
+        "can_catch_up": True,
+        "catch_up_max_age_days": None,
         "minimum_interval_days": None,
         "previous_dose_required": None,
         "due_window_days": 90,
@@ -687,7 +740,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "target_disease": "Tetanus, Diphtheria",
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP (Replaced TT)",
-        "notes": "Official UIP vaccine replacing TT in 2018–2019 to sustain adult diphtheria immunity. Tdap is private sector.",
+        "notes": "Official UIP vaccine replacing TT in 2018–2019 to sustain adult diphtheria immunity. Td has no upper age limit.",
+        "catch_up_notes": "Td has no upper age limit. If overdue, administer 0.5 mL IM as early as possible.",
     },
 
     # 25. Td-16 (Tetanus & adult Diphtheria at 16 years)
@@ -704,7 +758,9 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 5840,
         "recommended_age_display": "16 Years",
         "minimum_age_days": 5840,
-        "max_age_days": 7300,
+        "max_age_days": None,  # Td has no upper age limit
+        "can_catch_up": True,
+        "catch_up_max_age_days": None,
         "minimum_interval_days": 365,
         "previous_dose_required": ("TD_10Y", 1),
         "due_window_days": 90,
@@ -715,7 +771,8 @@ UNIVERSAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "target_disease": "Tetanus, Diphtheria",
         "is_conditional": False,
         "source_guideline": "MoHFW National Immunization Schedule / UIP (Replaced TT)",
-        "notes": "Official UIP adolescent booster at 16 years.",
+        "notes": "Official UIP adolescent booster at 16 years. Td has no upper age limit.",
+        "catch_up_notes": "Td has no upper age limit. If overdue, administer 0.5 mL IM as early as possible.",
     },
 
     # 26. Td FOR PREGNANCY (Contextual, tracked separately from child schedule)
@@ -768,7 +825,9 @@ CONDITIONAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 270,
         "recommended_age_display": "9–12 Months",
         "minimum_age_days": 270,
-        "max_age_days": 1825,  # Up to 5 years
+        "max_age_days": 1825,  # Up to 5 years routine
+        "can_catch_up": True,
+        "catch_up_max_age_days": 5475,  # Catch-up up to 15 years in endemic districts
         "minimum_interval_days": None,
         "previous_dose_required": None,
         "due_window_days": 14,
@@ -782,6 +841,8 @@ CONDITIONAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "condition_description": "Applicable only in ~231 designated Japanese Encephalitis endemic districts across India under UIP.",
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
         "notes": "Live attenuated SA-14-14-2 vaccine administered in designated endemic districts alongside MR-1. Not universal for all districts.",
+        "catch_up_notes": "In endemic districts under UIP, children who missed the 9–12 month dose can receive JE catch-up vaccination up to 15 years of age.",
+        "clinical_review_notes": "Age exceeds 15 years. Clinical evaluation required for JE vaccination in individuals residing in endemic districts.",
     },
 
     # 28. JE-2 (Japanese Encephalitis 2)
@@ -798,8 +859,10 @@ CONDITIONAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "recommended_age_days": 480,
         "recommended_age_display": "16–24 Months",
         "minimum_age_days": 480,
-        "max_age_days": 1825,
-        "minimum_interval_days": 180,  # 6 months after JE-1
+        "max_age_days": 1825,  # Up to 5 years routine
+        "can_catch_up": True,
+        "catch_up_max_age_days": 5475,  # Catch-up up to 15 years in endemic districts
+        "minimum_interval_days": 28,  # MoHFW/ITSU operational guidelines: Minimum 28 days (4 weeks / 1 month) interval when delayed, provided child is at least 16 months of age
         "previous_dose_required": ("JE_1", 1),
         "due_window_days": 30,
         "grace_period_days": 90,
@@ -811,7 +874,9 @@ CONDITIONAL_NIS_SCHEDULE: List[Dict[str, Any]] = [
         "condition_tag": "eligible_for_je",
         "condition_description": "Applicable only in ~231 designated Japanese Encephalitis endemic districts across India under UIP.",
         "source_guideline": "MoHFW National Immunization Schedule / UIP",
-        "notes": "Second JE dose at 16–24 months in endemic districts.",
+        "notes": "Second JE dose at 16–24 months in endemic districts. If delayed, minimum interval is 1 month (28 days) after JE-1, provided minimum age 16 months is reached.",
+        "catch_up_notes": "In endemic districts, second JE dose can be administered up to 15 years of age with a minimum interval of 28 days after JE-1.",
+        "clinical_review_notes": "Age exceeds 15 years. Clinical evaluation required.",
     },
 ]
 

@@ -134,9 +134,9 @@ def test_schedule_engine_suite():
     print("PASS: Td-10 and Td-16 verified in Universal NIS. Tdap preserved for private sector.")
 
     # -------------------------------------------------------------------------
-    # 7. Testing Conditional Japanese Encephalitis (JE) Logic
+    # 7. Testing Conditional Japanese Encephalitis (JE) Logic & 28-Day Interval
     # -------------------------------------------------------------------------
-    print("\n--- 7. Testing Conditional JE Logic (Endemic Districts Only) ---")
+    print("\n--- 7. Testing Conditional JE Logic (Endemic Districts Only) & 28-Day Interval ---")
     # Universal child schedule does NOT include JE by default
     assert not any(i["code"] == "JE_1" for i in items), "JE should not be universally present by default"
 
@@ -148,11 +148,94 @@ def test_schedule_engine_suite():
     assert je1["category"] == VaccineCategory.CONDITIONAL_NIS.value
     assert je1["is_conditional"] is True
     assert je1["condition_tag"] == "eligible_for_je"
+    assert je1["recommended_age_display"] == "9–12 Months"
 
     je2 = next(i for i in items_je if i["code"] == "JE_2")
     assert je2["category"] == VaccineCategory.CONDITIONAL_NIS.value
     assert je2["recommended_age_display"] == "16–24 Months"
-    print("PASS: JE-1 and JE-2 correctly conditioned on eligible_for_je.")
+    assert je2["minimum_interval_days"] == 28, f"Expected 28-day minimum interval for delayed JE-2, got {je2['minimum_interval_days']}"
+    print("PASS: JE-1 and JE-2 verified with authoritative recommended ages and 28-day minimum interval (MoHFW/ITSU).")
+
+    # Testing delayed JE-1 interval shift for JE-2
+    dob_je = date(2024, 1, 1)
+    # JE-1 administered late at 18 months (approx 550 days)
+    adm_je1 = dob_je + timedelta(days=550)
+    records_je = [{
+        "vaccine_code": "JE_1",
+        "dose_number": 1,
+        "administered_date": adm_je1,
+        "id": "rec_je1"
+    }]
+    ref_je = adm_je1 + timedelta(days=5)
+    res_je_shift = calculate_member_schedule(dob_je, records_je, ref_je, eligible_for_je=True)
+    je2_shifted = next(i for i in res_je_shift["schedule_items"] if i["code"] == "JE_2")
+    expected_je2_due = adm_je1 + timedelta(days=28)
+    assert je2_shifted["calculated_due_date"] == expected_je2_due, f"Expected {expected_je2_due}, got {je2_shifted['calculated_due_date']}"
+    print("PASS: Delayed JE-1 correctly shifts JE-2 due date by verified 28-day minimum interval.")
+
+    # -------------------------------------------------------------------------
+    # 7b. Testing Source-Grounded MISSED vs CATCH_UP vs CLINICAL_REVIEW
+    # -------------------------------------------------------------------------
+    print("\n--- 7b. Testing Source-Grounded MISSED vs CATCH_UP vs CLINICAL_REVIEW ---")
+    # Case: 14-month-old infant (~425 days old) with NO prior vaccinations
+    dob_14m = today - timedelta(days=425)
+    res_14m = calculate_member_schedule(date_of_birth=dob_14m, existing_records=[], reference_date=today)
+    items_14m = res_14m["schedule_items"]
+
+    # 1. HepB Birth Dose: Strictly MISSED past 24h
+    hepb_14m = next(i for i in items_14m if i["code"] == "HEPB_BIRTH")
+    assert hepb_14m["status"] == VaccinationStatus.MISSED
+    assert "Pentavalent" in hepb_14m["status_reason"]
+
+    # 2. OPV-0: Strictly MISSED past 15 days
+    opv0_14m = next(i for i in items_14m if i["code"] == "OPV_0")
+    assert opv0_14m["status"] == VaccinationStatus.MISSED
+
+    # 3. Rotavirus: Strictly MISSED past 1 year (cannot be initiated/continued after 1 year)
+    rota1_14m = next(i for i in items_14m if i["code"] == "ROTA_1")
+    assert rota1_14m["status"] == VaccinationStatus.MISSED
+    assert "Rotavirus vaccination window expired" in rota1_14m["status_reason"]
+
+    # 4. Pentavalent-1: CATCH_UP_REQUIRED (NOT MISSED! Under UIP, replaced by DPT + standalone HepB)
+    penta1_14m = next(i for i in items_14m if i["code"] == "PENTA_1")
+    assert penta1_14m["status"] == VaccinationStatus.CATCH_UP_REQUIRED, f"Expected CATCH_UP_REQUIRED, got {penta1_14m['status']}"
+    assert "DPT" in penta1_14m["status_reason"]
+    assert "Hepatitis B" in penta1_14m["status_reason"]
+
+    # 5. BCG: CLINICAL_REVIEW past 1 year (requires Mantoux tuberculin test)
+    bcg_14m = next(i for i in items_14m if i["code"] == "BCG")
+    assert bcg_14m["status"] == VaccinationStatus.CLINICAL_REVIEW, f"Expected CLINICAL_REVIEW, got {bcg_14m['status']}"
+    assert "Mantoux" in bcg_14m["status_reason"]
+
+    print("PASS: 14-month infant correctly evaluated: HepB/OPV-0/Rota MISSED, Penta CATCH_UP_REQUIRED, BCG CLINICAL_REVIEW.")
+
+    # Case: 8-year-old child (~2920 days old)
+    dob_8y = today - timedelta(days=2920)
+    res_8y = calculate_member_schedule(date_of_birth=dob_8y, existing_records=[], reference_date=today)
+    items_8y = res_8y["schedule_items"]
+
+    # DPT Booster-2 (>7 years): whole-cell pertussis contraindicated, catch-up with adult Td
+    dpt_8y = next(i for i in items_8y if i["code"] == "DPT_BOOSTER_2")
+    assert dpt_8y["status"] == VaccinationStatus.CATCH_UP_REQUIRED
+    assert "contraindicated" in dpt_8y["status_reason"]
+
+    # MR-1 (>5 years routine, but catch-up up to 15 years in MoHFW/WHO campaign)
+    mr1_8y = next(i for i in items_8y if i["code"] == "MR_1")
+    assert mr1_8y["status"] == VaccinationStatus.CATCH_UP_REQUIRED
+    assert "15 years" in mr1_8y["status_reason"]
+
+    print("PASS: 8-year child correctly evaluated: DPT Booster and MR-1 designated CATCH_UP_REQUIRED.")
+
+    # Case: 18-year-old adolescent / adult (~6600 days old, past 365-day grace period)
+    dob_18y = today - timedelta(days=6600)
+    res_18y = calculate_member_schedule(date_of_birth=dob_18y, existing_records=[], reference_date=today)
+    items_18y = res_18y["schedule_items"]
+
+    # Td-16: Has NO arbitrary maximum age cutoff! Must NOT be falsely marked MISSED
+    td16_18y = next(i for i in items_18y if i["code"] == "TD_16Y")
+    assert td16_18y["status"] == VaccinationStatus.OVERDUE, f"Expected OVERDUE for adult Td, got {td16_18y['status']}"
+    assert td16_18y["status"] != VaccinationStatus.MISSED
+    print("PASS: 18-year individual evaluates Td-16 as OVERDUE, never permanently MISSED.")
 
     # -------------------------------------------------------------------------
     # 8. Testing Private / Optional Vaccines Classification
