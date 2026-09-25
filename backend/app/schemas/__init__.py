@@ -15,6 +15,14 @@ from app.schemas.family import (
     FamilyMemberUpdateRequest,
     FamilyMemberResponse,
 )
+from app.schemas.vaccination import (
+    VaccinationRecordCreateRequest,
+    VaccinationRecordUpdateRequest,
+    VaccinationRecordResponse,
+    ScheduledDoseResponse,
+    MemberScheduleSummary,
+    MemberScheduleResponse,
+)
 
 __all__ = [
     "APIResponse",
@@ -31,4 +39,10 @@ __all__ = [
     "FamilyMemberCreateRequest",
     "FamilyMemberUpdateRequest",
     "FamilyMemberResponse",
+    "VaccinationRecordCreateRequest",
+    "VaccinationRecordUpdateRequest",
+    "VaccinationRecordResponse",
+    "ScheduledDoseResponse",
+    "MemberScheduleSummary",
+    "MemberScheduleResponse",
 ]

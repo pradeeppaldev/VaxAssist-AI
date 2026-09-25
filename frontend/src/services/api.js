@@ -184,4 +184,53 @@ export const familyApi = {
   },
 };
 
+/**
+ * Vaccination Management & Schedule API (Phase 4)
+ */
+export const vaccinationApi = {
+  getCatalog: async () => {
+    return await request('/vaccinations/catalog', {
+      method: 'GET',
+    });
+  },
+
+  getMemberRecords: async (memberId) => {
+    return await request(`/vaccinations/member/${memberId}`, {
+      method: 'GET',
+    });
+  },
+
+  getMemberSchedule: async (memberId) => {
+    return await request(`/vaccinations/member/${memberId}/schedule`, {
+      method: 'GET',
+    });
+  },
+
+  addRecord: async (memberId, payload) => {
+    return await request(`/vaccinations/member/${memberId}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  getRecord: async (recordId) => {
+    return await request(`/vaccinations/records/${recordId}`, {
+      method: 'GET',
+    });
+  },
+
+  updateRecord: async (recordId, payload) => {
+    return await request(`/vaccinations/records/${recordId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteRecord: async (recordId) => {
+    return await request(`/vaccinations/records/${recordId}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
 export { API_BASE_URL };
