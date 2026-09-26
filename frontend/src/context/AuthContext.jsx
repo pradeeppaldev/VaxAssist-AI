@@ -4,40 +4,64 @@ import { authApi } from '../services/api';
 const AuthContext = createContext(null);
 
 const DEMO_ACCOUNTS = {
-  'admin@vaxassist.ai': {
-    id: 'USR-1004',
-    name: 'Pradeep Pal (Lead Administrator)',
-    email: 'admin@vaxassist.ai',
+  'admin@vaxassist.demo': {
+    id: '6ab7e60b13f13ee4ef3ef46a',
+    name: 'Sunita Rao',
+    email: 'admin@vaxassist.demo',
     role: 'ADMIN',
     account_status: 'ACTIVE',
   },
-  'doctor@vaxassist.ai': {
-    id: 'USR-1001',
-    name: 'Dr. Priya Sharma',
-    email: 'priya.sharma@apollohealth.org',
-    role: 'HEALTHCARE_WORKER',
+  'admin@vaxassist.ai': {
+    id: '6ab7e60b13f13ee4ef3ef46a',
+    name: 'Sunita Rao',
+    email: 'admin@vaxassist.demo',
+    role: 'ADMIN',
     account_status: 'ACTIVE',
   },
-  'priya.sharma@apollohealth.org': {
-    id: 'USR-1001',
-    name: 'Dr. Priya Sharma',
-    email: 'priya.sharma@apollohealth.org',
+  'dr.anjali.deshmukh@vaxassist.demo': {
+    id: '6ab7e60a13f13ee4ef3ef465',
+    name: 'Dr. Anjali Deshmukh',
+    email: 'dr.anjali.deshmukh@vaxassist.demo',
     role: 'HEALTHCARE_WORKER',
     account_status: 'ACTIVE',
+    clinic_or_hospital: 'Lilavati Hospital & Research Centre',
+    license_number: 'MMC-2012-08492',
+  },
+  'doctor@vaxassist.ai': {
+    id: '6ab7e60a13f13ee4ef3ef465',
+    name: 'Dr. Anjali Deshmukh',
+    email: 'dr.anjali.deshmukh@vaxassist.demo',
+    role: 'HEALTHCARE_WORKER',
+    account_status: 'ACTIVE',
+    clinic_or_hospital: 'Lilavati Hospital & Research Centre',
+    license_number: 'MMC-2012-08492',
+  },
+  'dr.vikram.patil@vaxassist.demo': {
+    id: '6ab7e60b13f13ee4ef3ef46c',
+    name: 'Dr. Vikram Patil',
+    email: 'dr.vikram.patil@vaxassist.demo',
+    role: 'HEALTHCARE_WORKER',
+    account_status: 'ACTIVE',
+    clinic_or_hospital: 'KEM Hospital, Parel, Mumbai',
+    license_number: 'MMC-2008-01234',
+  },
+  'rajesh.sharma@vaxassist.demo': {
+    id: '6ab7e60913f13ee4ef3ef463',
+    name: 'Rajesh Sharma',
+    email: 'rajesh.sharma@vaxassist.demo',
+    role: 'PATIENT',
+    account_status: 'ACTIVE',
+    household_name: 'Sharma Household',
+    city: 'Mumbai',
   },
   'patient@vaxassist.ai': {
-    id: 'USR-1002',
-    name: 'Rajesh Verma',
-    email: 'rajesh.verma@gmail.com',
+    id: '6ab7e60913f13ee4ef3ef463',
+    name: 'Rajesh Sharma',
+    email: 'rajesh.sharma@vaxassist.demo',
     role: 'PATIENT',
     account_status: 'ACTIVE',
-  },
-  'rajesh.verma@gmail.com': {
-    id: 'USR-1002',
-    name: 'Rajesh Verma',
-    email: 'rajesh.verma@gmail.com',
-    role: 'PATIENT',
-    account_status: 'ACTIVE',
+    household_name: 'Sharma Household',
+    city: 'Mumbai',
   },
 };
 

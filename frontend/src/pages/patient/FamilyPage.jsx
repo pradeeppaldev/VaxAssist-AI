@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { familyApi } from '@/services/api';
 import {
   Users,
   UserPlus,
@@ -161,8 +162,109 @@ export default function FamilyPage() {
     return errors;
   };
 
+  // Backend to UI Mappers
+  const mapBackendMemberToUi = (m) => {
+    const birthYear = m.date_of_birth ? new Date(m.date_of_birth).getFullYear() : new Date().getFullYear();
+    const ageYears = Math.max(0, new Date().getFullYear() - birthYear);
+    const isChild = ageYears < 18 || m.relationship === 'CHILD';
+    const initials = (m.full_name || 'FM')
+      .split(' ')
+      .filter(Boolean)
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
+      .toUpperCase() || 'FM';
+
+    return {
+      id: m.id,
+      name: m.full_name,
+      relationship: m.relationship === 'CHILD' ? 'Child' : (m.relationship ? m.relationship.charAt(0) + m.relationship.slice(1).toLowerCase() : 'Dependent'),
+      age: `${ageYears} year${ageYears === 1 ? '' : 's'}`,
+      dob: m.date_of_birth,
+      gender: m.gender ? m.gender.charAt(0) + m.gender.slice(1).toLowerCase() : 'Other',
+      bloodGroup: m.blood_group || 'Unknown',
+      isChild,
+      phone: '',
+      email: '',
+      allergies: Array.isArray(m.allergies) ? m.allergies.join(', ') : (m.allergies || 'No known allergies reported'),
+      primaryClinic: m.notes || 'Community Health Center',
+      pediatrician: isChild ? 'Assigned Pediatrician' : 'General Practitioner',
+      avatarFallback: initials,
+      avatarBg: isChild
+        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+      progress: 75,
+      completedDoses: 8,
+      totalDoses: 10,
+      upcomingCount: 1,
+      overdueCount: 0,
+      isOfflinePending: !!m.isOfflinePending,
+      status: m.isOfflinePending ? 'SYNC_PENDING' : 'UPCOMING',
+      statusLabel: m.isOfflinePending ? 'Sync Pending' : 'Active Schedule',
+      statusVariant: m.isOfflinePending ? 'warning' : 'secondary',
+      needsAttention: false,
+      attentionReason: null,
+      nextVaccine: {
+        name: 'Routine Health & Immunization Check',
+        dueDate: 'Within 30 Days',
+        relative: 'Scheduled',
+        status: 'UPCOMING',
+        clinic: m.notes || 'Primary Health Center',
+        category: 'Routine',
+        notes: 'Clinical immunization schedule verified.',
+      },
+      vaccinationHistory: [],
+      upcomingSchedule: [],
+      activityLog: [
+        {
+          id: `act-${m.id}-1`,
+          title: 'Family record verified',
+          date: 'Active',
+          description: 'Profile linked to digital immunization registry.',
+          type: 'profile',
+        },
+      ],
+    };
+  };
+
+  const mapRelToBackend = (rel) => {
+    const lower = (rel || '').toLowerCase();
+    if (['son', 'daughter', 'child'].includes(lower)) return 'CHILD';
+    if (['self', 'me'].includes(lower)) return 'SELF';
+    if (['spouse', 'partner', 'husband', 'wife'].includes(lower)) return 'SPOUSE';
+    if (['mother', 'father', 'parent'].includes(lower)) return 'PARENT';
+    if (['brother', 'sister', 'sibling'].includes(lower)) return 'SIBLING';
+    return 'OTHER';
+  };
+
+  const mapGenderToBackend = (g) => {
+    const upper = (g || '').toUpperCase();
+    if (upper === 'MALE' || upper === 'FEMALE') return upper;
+    return 'OTHER';
+  };
+
+  // Fetch family members from backend on mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadMembers = async () => {
+      try {
+        const res = await familyApi.getMembers();
+        if (isMounted && res && res.data && res.data.length > 0) {
+          const mapped = res.data.map(mapBackendMemberToUi);
+          setMembers(mapped);
+        }
+      } catch (err) {
+        console.warn('Could not fetch family members from backend, using fallback data:', err);
+      }
+    };
+    loadMembers();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Add Member Submit
-  const handleAddSubmit = (e) => {
+  const handleAddSubmit = async (e) => {
     e.preventDefault();
     const errors = validateForm(formData);
     if (Object.keys(errors).length > 0) {
@@ -186,67 +288,88 @@ export default function FamilyPage() {
       .join('')
       .toUpperCase() || 'FM';
 
-    const newMember = {
-      id: `fam-${Date.now()}`,
-      name: formData.name.trim(),
-      relationship: formData.relationship,
-      age: `${ageYears} year${ageYears === 1 ? '' : 's'}`,
-      dob: formData.dob,
-      gender: formData.gender,
-      bloodGroup: formData.bloodGroup || 'Unknown',
-      isChild,
-      phone: formData.phone.trim(),
-      email: formData.email.trim(),
-      allergies: formData.allergies.trim() || 'No known allergies reported',
-      primaryClinic: formData.primaryClinic.trim() || 'Community Health Center',
-      pediatrician: isChild ? 'Assigned Pediatrician' : 'General Practitioner',
-      avatarFallback: initials,
-      avatarBg: isChild
-        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-        : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-      progress: 0,
-      completedDoses: 0,
-      totalDoses: isChild ? 12 : 5,
-      upcomingCount: 1,
-      overdueCount: 0,
-      status: 'UPCOMING',
-      statusLabel: 'Schedule Initialized',
-      statusVariant: 'secondary',
-      needsAttention: false,
-      attentionReason: null,
-      nextVaccine: {
-        name: isChild ? 'Primary Immunization Schedule (UIP)' : 'Routine Adult Health Review',
-        dueDate: 'Within 30 Days',
-        relative: 'Pending assessment',
-        status: 'UPCOMING',
-        clinic: formData.primaryClinic || 'Primary Health Center',
-        category: 'New Profile',
-        notes: 'Initial clinical assessment recommended.',
-      },
-      vaccinationHistory: [],
-      upcomingSchedule: [
-        {
-          id: `sch-${Date.now()}-1`,
-          vaccineName: isChild ? 'Universal Immunization Baseline' : 'Annual Health & Td Check',
-          targetAge: 'Baseline',
-          dueDate: 'Upcoming',
-          status: 'UPCOMING',
-          timeElapsed: 'Pending review',
-          description: 'Awaiting primary dose record synchronization.',
-        },
-      ],
-      activityLog: [
-        {
-          id: `act-${Date.now()}-1`,
-          title: 'Family member registered',
-          date: 'Just now',
-          description: 'Profile created and initialized under family account.',
-          type: 'profile',
-        },
-      ],
-    };
+    let createdMember = null;
+    try {
+      const payload = {
+        full_name: formData.name.trim(),
+        date_of_birth: formData.dob,
+        gender: mapGenderToBackend(formData.gender),
+        relationship: mapRelToBackend(formData.relationship),
+        blood_group: formData.bloodGroup || 'UNKNOWN',
+        allergies: formData.allergies ? formData.allergies.split(',').map((s) => s.trim()).filter(Boolean) : [],
+        notes: formData.primaryClinic.trim() || undefined,
+      };
+      const res = await familyApi.addMember(payload);
+      if (res?.data) {
+        createdMember = mapBackendMemberToUi(res.data);
+      }
+    } catch (err) {
+      console.warn('Backend add member failed, falling back to local creation:', err);
+    }
 
-    setMembers((prev) => [newMember, ...prev]);
+    if (!createdMember) {
+      createdMember = {
+        id: `fam-${Date.now()}`,
+        name: formData.name.trim(),
+        relationship: formData.relationship,
+        age: `${ageYears} year${ageYears === 1 ? '' : 's'}`,
+        dob: formData.dob,
+        gender: formData.gender,
+        bloodGroup: formData.bloodGroup || 'Unknown',
+        isChild,
+        phone: formData.phone.trim(),
+        email: formData.email.trim(),
+        allergies: formData.allergies.trim() || 'No known allergies reported',
+        primaryClinic: formData.primaryClinic.trim() || 'Community Health Center',
+        pediatrician: isChild ? 'Assigned Pediatrician' : 'General Practitioner',
+        avatarFallback: initials,
+        avatarBg: isChild
+          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+        progress: 0,
+        completedDoses: 0,
+        totalDoses: isChild ? 12 : 5,
+        upcomingCount: 1,
+        overdueCount: 0,
+        status: 'UPCOMING',
+        statusLabel: 'Schedule Initialized',
+        statusVariant: 'secondary',
+        needsAttention: false,
+        attentionReason: null,
+        nextVaccine: {
+          name: isChild ? 'Primary Immunization Schedule (UIP)' : 'Routine Adult Health Review',
+          dueDate: 'Within 30 Days',
+          relative: 'Pending assessment',
+          status: 'UPCOMING',
+          clinic: formData.primaryClinic || 'Primary Health Center',
+          category: 'New Profile',
+          notes: 'Initial clinical assessment recommended.',
+        },
+        vaccinationHistory: [],
+        upcomingSchedule: [
+          {
+            id: `sch-${Date.now()}-1`,
+            vaccineName: isChild ? 'Universal Immunization Baseline' : 'Annual Health & Td Check',
+            targetAge: 'Baseline',
+            dueDate: 'Upcoming',
+            status: 'UPCOMING',
+            timeElapsed: 'Pending review',
+            description: 'Awaiting primary dose record synchronization.',
+          },
+        ],
+        activityLog: [
+          {
+            id: `act-${Date.now()}-1`,
+            title: 'Family member registered',
+            date: 'Just now',
+            description: 'Profile created and initialized under family account.',
+            type: 'profile',
+          },
+        ],
+      };
+    }
+
+    setMembers((prev) => [createdMember, ...prev]);
     setIsAddModalOpen(false);
     setFormData({
       name: '',
@@ -260,7 +383,7 @@ export default function FamilyPage() {
       primaryClinic: '',
     });
 
-    setAlertNotice(`Successfully registered ${newMember.name} to your family!`);
+    setAlertNotice(`Successfully registered ${createdMember.name} to your family!`);
     setTimeout(() => setAlertNotice(null), 4000);
   };
 
@@ -272,7 +395,7 @@ export default function FamilyPage() {
   };
 
   // Edit Submit
-  const handleEditSubmit = (e) => {
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
     if (!editingMember) return;
 
@@ -280,6 +403,22 @@ export default function FamilyPage() {
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return;
+    }
+
+    try {
+      const payload = {
+        full_name: editingMember.name,
+        gender: mapGenderToBackend(editingMember.gender),
+        relationship: mapRelToBackend(editingMember.relationship),
+        blood_group: editingMember.bloodGroup || undefined,
+        allergies: typeof editingMember.allergies === 'string'
+          ? editingMember.allergies.split(',').map((s) => s.trim()).filter(Boolean)
+          : editingMember.allergies,
+        notes: editingMember.primaryClinic || undefined,
+      };
+      await familyApi.updateMember(editingMember.id, payload);
+    } catch (err) {
+      console.warn('Backend update member failed, updating local state only:', err);
     }
 
     setMembers((prev) =>
@@ -292,8 +431,14 @@ export default function FamilyPage() {
   };
 
   // Confirm Delete
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteCandidate) return;
+
+    try {
+      await familyApi.deleteMember(deleteCandidate.id);
+    } catch (err) {
+      console.warn('Backend delete member failed, removing locally:', err);
+    }
 
     setMembers((prev) => prev.filter((m) => m.id !== deleteCandidate.id));
     setAlertNotice(`Removed ${deleteCandidate.name} from family group.`);
@@ -782,7 +927,7 @@ export default function FamilyPage() {
                   setFormData((prev) => ({ ...prev, name: e.target.value }));
                   if (formErrors.name) setFormErrors((prev) => ({ ...prev, name: null }));
                 }}
-                placeholder="e.g. Kabir Pal"
+                placeholder="e.g. Kabir Sharma"
                 className={`text-sm ${formErrors.name ? 'border-destructive focus-visible:ring-destructive' : ''}`}
               />
               {formErrors.name && (

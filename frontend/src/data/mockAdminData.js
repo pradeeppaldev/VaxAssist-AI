@@ -126,7 +126,7 @@ export const MOCK_ADMIN_USERS = [
   },
   {
     id: 'USR-1004',
-    name: 'Pradeep Pal (Lead Administrator)',
+    name: 'Sunita Rao (Lead Administrator)',
     email: 'admin@vaxassist.ai',
     phone: '+91 99000 11223',
     role: 'ADMIN',
@@ -474,7 +474,7 @@ export const MOCK_HEALTHCARE_WORKERS_ADMIN = [
     account_status: 'ACTIVE',
     submittedAt: '2025-11-10T10:00:00Z',
     submittedAgo: '10 months ago',
-    approvedBy: 'Admin (Pradeep Pal)',
+    approvedBy: 'Admin (Sunita Rao)',
     approvedAt: '2025-11-14T14:20:00Z',
     documents: [
       { name: 'KMC_Certified_Record.pdf', size: '2.1 MB', type: 'Medical Council Reg', verified: true },
@@ -500,7 +500,7 @@ export const MOCK_HEALTHCARE_WORKERS_ADMIN = [
     account_status: 'ACTIVE',
     submittedAt: '2025-11-28T09:00:00Z',
     submittedAgo: '9 months ago',
-    approvedBy: 'Admin (Pradeep Pal)',
+    approvedBy: 'Admin (Sunita Rao)',
     approvedAt: '2025-12-01T11:00:00Z',
     documents: [
       { name: 'HNMC_Registration_Certificate.pdf', size: '3.0 MB', type: 'Medical Council Reg', verified: true },
@@ -548,7 +548,7 @@ export const MOCK_HEALTHCARE_WORKERS_ADMIN = [
     account_status: 'INACTIVE',
     submittedAt: '2026-09-18T10:00:00Z',
     submittedAgo: '7 days ago',
-    reviewedBy: 'Admin (Pradeep Pal)',
+    reviewedBy: 'Admin (Sunita Rao)',
     reviewedAt: '2026-09-19T14:00:00Z',
     documents: [
       { name: 'Certificate_Course_Health.pdf', size: '0.8 MB', type: 'Non-Medical Certificate', verified: false },

@@ -25,11 +25,15 @@ import {
   RefreshCw,
   ExternalLink,
   ShieldAlert,
-  Send
+  Send,
+  LayoutDashboard,
+  FileText,
+  Settings
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
 import { formatDate } from '@/lib/utils';
+import { familyApi, vaccinationApi, notificationApi, agentApi } from '@/services/api';
 
 // Common & Healthcare UI Components
 import { PageHeader } from '@/components/common/PageHeader';
@@ -74,93 +78,116 @@ import { Textarea } from '@/components/ui/textarea';
 const FAMILY_MEMBERS = [
   {
     id: 'fam-1',
-    name: 'Aarav Pal',
+    name: 'Aarav Sharma',
     relationship: 'Son',
-    age: '8 years',
-    dob: '2018-04-12',
+    age: '6 years',
+    dob: '2020-07-10',
     gender: 'Male',
     bloodGroup: 'O+',
-    avatarFallback: 'AP',
+    avatarFallback: 'AS',
     avatarBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
-    progress: 85,
-    completedDoses: 11,
-    totalDoses: 13,
+    progress: 88,
+    completedDoses: 18,
+    totalDoses: 19,
     status: 'ACTION_NEEDED',
     statusLabel: '1 Overdue',
     statusVariant: 'overdue',
     nextVaccine: {
-      name: 'Measles-Rubella (MR - Dose 1)',
-      due: 'Oct 12, 2026',
-      relative: '12 days overdue',
+      name: 'DPT Booster 2 (Age 5-6 Years)',
+      due: 'Jul 10, 2026',
+      relative: 'Overdue',
       status: 'OVERDUE',
     },
   },
   {
     id: 'fam-2',
-    name: 'Anaya Pal',
+    name: 'Ananya Sharma',
     relationship: 'Daughter',
-    age: '4 years',
-    dob: '2022-09-18',
+    age: '4 months',
+    dob: '2026-05-18',
     gender: 'Female',
     bloodGroup: 'B+',
-    avatarFallback: 'AP',
+    avatarFallback: 'AS',
     avatarBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
-    progress: 78,
-    completedDoses: 7,
-    totalDoses: 9,
+    progress: 70,
+    completedDoses: 10,
+    totalDoses: 14,
     status: 'DUE_SOON',
-    statusLabel: '1 Due Soon',
+    statusLabel: '14-Wk Due',
     statusVariant: 'due',
     nextVaccine: {
-      name: 'DPT Booster (Dose 1)',
-      due: 'Oct 29, 2026',
-      relative: 'Due in 5 days',
-      status: 'DUE',
+      name: 'Pentavalent 3 & OPV 3',
+      due: 'Aug 24, 2026',
+      relative: 'Action Needed',
+      status: 'CATCH_UP_REQUIRED',
     },
   },
   {
     id: 'fam-3',
-    name: 'Meera Pal',
+    name: 'Pooja Sharma',
     relationship: 'Spouse',
-    age: '32 years',
-    dob: '1994-06-25',
+    age: '35 years',
+    dob: '1991-08-22',
     gender: 'Female',
     bloodGroup: 'A+',
-    avatarFallback: 'MP',
+    avatarFallback: 'PS',
     avatarBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
     progress: 100,
-    completedDoses: 8,
-    totalDoses: 8,
+    completedDoses: 5,
+    totalDoses: 5,
     status: 'UP_TO_DATE',
     statusLabel: 'All Up to Date',
     statusVariant: 'success',
     nextVaccine: {
       name: 'All scheduled vaccines completed',
       due: 'Routine Complete',
-      relative: 'Next review 2028',
+      relative: 'Verified',
       status: 'COMPLETED',
     },
   },
   {
     id: 'fam-4',
-    name: 'Pradeep Pal',
+    name: 'Rajesh Sharma',
     relationship: 'Self (Account Owner)',
-    age: '35 years',
-    dob: '1991-02-14',
+    age: '38 years',
+    dob: '1988-04-15',
     gender: 'Male',
     bloodGroup: 'O+',
-    avatarFallback: 'PP',
+    avatarFallback: 'RS',
     avatarBg: 'bg-primary/10 text-primary border-primary/20',
-    progress: 89,
-    completedDoses: 8,
-    totalDoses: 9,
+    progress: 100,
+    completedDoses: 5,
+    totalDoses: 5,
+    status: 'UP_TO_DATE',
+    statusLabel: 'All Up to Date',
+    statusVariant: 'success',
+    nextVaccine: {
+      name: 'All scheduled vaccines completed',
+      due: 'Routine Complete',
+      relative: 'Verified',
+      status: 'COMPLETED',
+    },
+  },
+  {
+    id: 'fam-5',
+    name: 'Ramesh Sharma',
+    relationship: 'Father (Grandparent)',
+    age: '68 years',
+    dob: '1958-01-12',
+    gender: 'Male',
+    bloodGroup: 'B+',
+    avatarFallback: 'RS',
+    avatarBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+    progress: 80,
+    completedDoses: 4,
+    totalDoses: 5,
     status: 'UPCOMING',
     statusLabel: '1 Upcoming',
     statusVariant: 'secondary',
     nextVaccine: {
-      name: 'Annual Influenza Shot (Quadrivalent)',
-      due: 'Nov 15, 2026',
-      relative: 'Due in 3 weeks',
+      name: 'Annual Seasonal Influenza',
+      due: 'Oct 15, 2026',
+      relative: 'In 3 weeks',
       status: 'UPCOMING',
     },
   },
@@ -170,113 +197,87 @@ const ATTENTION_ITEMS = [
   {
     id: 'att-1',
     memberId: 'fam-1',
-    memberName: 'Aarav Pal',
-    relationship: 'Son (8 yrs)',
-    vaccineName: 'Measles-Rubella (MR - Dose 1)',
+    memberName: 'Aarav Sharma',
+    relationship: 'Son (6 yrs)',
+    vaccineName: 'DPT Booster 2 (Age 5-6 Years)',
     status: 'OVERDUE',
-    dueDate: 'Oct 12, 2026',
-    timeElapsed: '12 days overdue',
+    dueDate: '10 Jul 2026',
+    timeElapsed: 'Action needed',
     description:
-      'Recommended under Universal Immunization Programme (UIP). Critical for herd immunity against measles and rubella.',
+      'Recommended under Universal Immunization Programme (UIP). Critical for herd immunity against diphtheria, pertussis, and tetanus.',
     actionPrimary: 'Schedule Catch-Up',
     actionSecondary: 'Record Dose',
-    clinicHint: 'Primary Health Center (Sector 8) or Pediatrician',
+    clinicHint: 'Lilavati Hospital & Research Centre • Dr. Anjali Deshmukh',
   },
   {
     id: 'att-2',
     memberId: 'fam-2',
-    memberName: 'Anaya Pal',
-    relationship: 'Daughter (4 yrs)',
-    vaccineName: 'DPT Booster (Dose 1)',
-    status: 'DUE',
-    dueDate: 'Oct 29, 2026',
-    timeElapsed: 'Due in 5 days',
+    memberName: 'Ananya Sharma',
+    relationship: 'Daughter (4 mos)',
+    vaccineName: 'Pentavalent (Dose 3) & OPV (Dose 3)',
+    status: 'CATCH_UP_REQUIRED',
+    dueDate: '24 Aug 2026',
+    timeElapsed: 'Catch-up advised',
     description:
-      'Booster dose recommended between ages 4-6 to maintain protection against Diphtheria, Pertussis, and Tetanus.',
+      '14-week milestone vaccines protecting against DTP, Hepatitis B, Hib, and Poliovirus. Safe to administer immediately.',
     actionPrimary: 'View Clinic Info',
     actionSecondary: 'Record Dose',
-    clinicHint: 'City Child Care Clinic • Appointment Confirmed for Oct 29',
+    clinicHint: 'Lilavati Hospital & Research Centre • Dr. Anjali Deshmukh',
   },
 ];
 
 const UPCOMING_VACCINATIONS = [
   {
     id: 'vax-1',
-    memberId: 'fam-2',
-    memberName: 'Anaya Pal',
-    memberAge: '4 yrs',
-    vaccineName: 'DPT Booster (Dose 1)',
-    doseNumber: 'Booster 1',
-    dueDate: 'Oct 29, 2026',
-    relativeTime: 'In 5 days',
-    status: 'DUE',
-    clinic: 'City Child Care Clinic, Sector 14',
-    category: 'Booster',
+    memberId: 'fam-5',
+    memberName: 'Ramesh Sharma',
+    memberAge: '68 yrs',
+    vaccineName: 'Annual Seasonal Influenza (Quadrivalent)',
+    doseNumber: '2026-2027 Season',
+    dueDate: '15 Oct 2026',
+    relativeTime: 'In 3 weeks',
+    status: 'UPCOMING',
+    clinic: 'Lilavati Hospital & Research Centre, Mumbai',
+    category: 'Senior Immunization',
   },
   {
     id: 'vax-2',
-    memberId: 'fam-1',
-    memberName: 'Aarav Pal',
-    memberAge: '8 yrs',
-    vaccineName: 'Measles-Rubella (MR - Dose 1)',
-    doseNumber: 'Dose 1',
-    dueDate: 'Oct 12, 2026',
-    relativeTime: '12 days overdue',
-    status: 'OVERDUE',
-    clinic: 'Primary Health Center North',
-    category: 'Catch-up',
-  },
-  {
-    id: 'vax-3',
-    memberId: 'fam-4',
-    memberName: 'Pradeep Pal',
-    memberAge: '35 yrs',
-    vaccineName: 'Annual Influenza (Quadrivalent)',
-    doseNumber: 'Annual',
-    dueDate: 'Nov 15, 2026',
+    memberId: 'fam-2',
+    memberName: 'Ananya Sharma',
+    memberAge: '4 mos',
+    vaccineName: 'Fractional Inactivated Polio (fIPV-2)',
+    doseNumber: 'Dose 2',
+    dueDate: '15 Oct 2026',
     relativeTime: 'In 3 weeks',
     status: 'UPCOMING',
-    clinic: 'Apollo Clinic & Diagnostic Hub',
-    category: 'Seasonal',
-  },
-  {
-    id: 'vax-4',
-    memberId: 'fam-2',
-    memberName: 'Anaya Pal',
-    memberAge: '4 yrs',
-    vaccineName: 'Oral Polio Vaccine (OPV Booster)',
-    doseNumber: 'Booster',
-    dueDate: 'Dec 10, 2026',
-    relativeTime: 'In 7 weeks',
-    status: 'UPCOMING',
-    clinic: 'City Child Care Clinic, Sector 14',
-    category: 'Routine',
+    clinic: 'Lilavati Hospital & Research Centre, Mumbai',
+    category: 'Universal NIS',
   },
 ];
 
 const REMINDERS = [
   {
     id: 'rem-1',
-    title: "Anaya's DPT Booster Appointment",
-    targetDate: 'Tomorrow, Oct 28 • 9:00 AM',
-    channel: 'WhatsApp & SMS',
-    badge: 'Tomorrow',
+    title: "Ananya's 14-Week Immunization Catch-Up",
+    targetDate: 'Active Schedule Alert',
+    channel: 'In-App & Email',
+    badge: 'Immediate Action',
     active: true,
   },
   {
     id: 'rem-2',
-    title: "Aarav's MR-1 Overdue Follow-up Notice",
-    targetDate: 'Sent 2 days ago • Oct 22, 2026',
+    title: "Aarav's DPT Booster 2 Overdue Notice",
+    targetDate: 'Dispatched via In-App Alert',
     channel: 'SMS & In-App Alert',
     badge: 'Overdue Alert',
     active: true,
   },
   {
     id: 'rem-3',
-    title: 'Seasonal Flu Shot Window for Family',
-    targetDate: 'Opens Nov 01, 2026',
-    channel: 'Email & WhatsApp',
-    badge: 'In 2 weeks',
+    title: 'Senior Citizen Flu Shot Window for Ramesh Sharma',
+    targetDate: 'Opens 15 Oct 2026',
+    channel: 'Email',
+    badge: 'Upcoming',
     active: true,
   },
 ];
@@ -284,37 +285,37 @@ const REMINDERS = [
 const RECENT_ACTIVITY = [
   {
     id: 'act-1',
-    title: 'Oral Polio Vaccine (OPV) Booster logged',
-    member: 'Anaya Pal',
-    date: 'Oct 22, 2026',
-    subtext: 'Verified by Dr. Sunita Sharma • Reg. #DL-8821',
+    title: 'Pentavalent 2 & Rotavirus 2 verified',
+    member: 'Ananya Sharma',
+    date: '27 Jul 2026',
+    subtext: 'Verified by Dr. Anjali Deshmukh • Lilavati Hospital',
     icon: CheckCircle2,
     iconColor: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
   },
   {
     id: 'act-2',
-    title: 'Automated WhatsApp reminder delivered',
-    member: 'Aarav Pal',
-    date: 'Oct 20, 2026',
-    subtext: 'Sent to registered contact +91 98765-43210',
+    title: 'Automated milestone reminder delivered',
+    member: 'Aarav Sharma',
+    date: '24 Sep 2026',
+    subtext: 'Sent to registered contact +91 98200 12345',
     icon: Bell,
     iconColor: 'text-primary bg-primary/10 border-primary/20',
   },
   {
     id: 'act-3',
     title: 'Official Immunization Certificate Downloaded',
-    member: 'Meera Pal',
-    date: 'Oct 18, 2026',
+    member: 'Pooja Sharma',
+    date: '10 Feb 2026',
     subtext: 'Digitally signed record with SHA-256 validation',
     icon: FileCheck,
     iconColor: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
   },
   {
     id: 'act-4',
-    title: 'Aarav Pal added to family account',
-    member: 'Aarav Pal',
-    date: 'Oct 01, 2026',
-    subtext: 'Historical vaccine records imported and verified',
+    title: 'Aarav Sharma immunization records verified',
+    member: 'Aarav Sharma',
+    date: '15 Apr 2021',
+    subtext: 'Universal NIS records verified by pediatric officer',
     icon: UserPlus,
     iconColor: 'text-purple-500 bg-purple-500/10 border-purple-500/20',
   },
@@ -322,16 +323,16 @@ const RECENT_ACTIVITY = [
 
 const AI_SUGGESTION_PROMPTS = [
   {
-    label: 'Aarav missed his MR-1 dose',
-    query: 'What is the catch-up protocol if my 8-year-old missed the Measles-Rubella (MR) booster?',
+    label: "Aarav's DPT Booster 2 catch-up",
+    query: 'What is the catch-up protocol under UIP guidelines if my 6-year-old child missed the DPT Booster 2?',
   },
   {
-    label: 'DPT booster side effects',
-    query: 'What are the expected side effects after a 4-year-old receives the DPT booster?',
+    label: "Ananya's 14-week vaccine combination",
+    query: 'Can Pentavalent, oral polio (OPV), Rotavirus, and fractional IPV be safely co-administered at 14 weeks?',
   },
   {
-    label: 'Co-administering Flu & DPT',
-    query: 'Can my child receive an annual flu vaccine and a booster shot during the same clinic visit?',
+    label: 'Senior flu & pneumonia guidelines',
+    query: 'What are the official MoHFW recommendations for influenza and pneumococcal vaccination in seniors over 65?',
   },
 ];
 
@@ -346,20 +347,97 @@ export default function PatientDashboard() {
   // View state switcher: 'normal' | 'loading' | 'empty' | 'error'
   const [viewState, setViewState] = useState('normal');
 
+  // Real Backend Data State
+  const [realMembers, setRealMembers] = useState([]);
+  const [realNotifs, setRealNotifs] = useState([]);
+  const [isSubmittingRecord, setIsSubmittingRecord] = useState(false);
+  const [dashboardNotice, setDashboardNotice] = useState(null);
+
+  // Load real family members and notifications from backend
+  const loadDashboardData = React.useCallback(async () => {
+    try {
+      const [membersRes, notifsRes] = await Promise.allSettled([
+        familyApi.getMembers(),
+        notificationApi.getNotifications({ limit: 5 }),
+      ]);
+
+      if (membersRes.status === 'fulfilled' && membersRes.value?.data && membersRes.value.data.length > 0) {
+        const colors = [
+          'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+          'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
+          'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+          'bg-primary/10 text-primary border-primary/20',
+        ];
+        const mapped = membersRes.value.data.map((m, idx) => {
+          const birthYear = m.date_of_birth ? new Date(m.date_of_birth).getFullYear() : 2020;
+          const ageYears = Math.max(0, new Date().getFullYear() - birthYear);
+          return {
+            id: m.id,
+            name: m.full_name,
+            relationship: m.relationship,
+            age: `${ageYears} years`,
+            dob: m.date_of_birth || '2020-01-01',
+            gender: m.gender || 'Unknown',
+            bloodGroup: m.blood_group || 'O+',
+            avatarFallback: (m.full_name || 'FM').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
+            avatarBg: colors[idx % colors.length],
+            progress: 88,
+            completedDoses: 8,
+            totalDoses: 9,
+            status: 'UPCOMING',
+            statusLabel: 'On Track',
+            statusVariant: 'success',
+            nextVaccine: {
+              name: 'Scheduled Milestone',
+              due: 'On Schedule',
+              relative: 'Verified',
+              status: 'UPCOMING',
+            },
+            raw: m,
+          };
+        });
+        setRealMembers(mapped);
+      }
+
+      if (notifsRes.status === 'fulfilled' && notifsRes.value?.data && notifsRes.value.data.length > 0) {
+        setRealNotifs(notifsRes.value.data);
+      }
+    } catch (err) {
+      console.warn('Dashboard live data fetch notice:', err);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  const activeFamilyMembers = realMembers.length > 0 ? realMembers : FAMILY_MEMBERS;
+  const activeReminders = realNotifs.length > 0
+    ? realNotifs.map((n, idx) => ({
+        id: n.id || `notif-${idx}`,
+        title: n.title || n.message,
+        targetDate: n.scheduled_for ? new Date(n.scheduled_for).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Active Schedule Alert',
+        channel: n.channel || 'In-App & Email',
+        badge: n.notification_type === 'OVERDUE' ? 'Immediate Action' : (n.notification_type === 'REMINDER' ? 'Upcoming' : 'Notice'),
+        active: true,
+      }))
+    : REMINDERS;
+
   // Record Vaccination Modal State
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [recordSuccess, setRecordSuccess] = useState(false);
+  const [recordError, setRecordError] = useState(null);
   const [recordForm, setRecordForm] = useState({
     memberId: 'fam-1',
     vaccineName: 'Measles-Rubella (MR - Dose 1)',
-    dateAdministered: '2026-10-24',
+    dateAdministered: new Date().toISOString().split('T')[0],
     clinicName: 'Primary Health Center North',
     batchNumber: 'MR-2026-X84',
     injectionSite: 'Left Upper Arm (Deltoid)',
     notes: '',
   });
 
-  const userName = user?.name ? user.name.split(' ')[0] : 'Pradeep';
+  const userName = user?.name ? user.name.split(' ')[0] : 'Family';
   const currentDateFormatted = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
@@ -368,24 +446,48 @@ export default function PatientDashboard() {
   });
 
   const handleOpenRecordModal = (prefillMemberId, prefillVaccine) => {
-    if (prefillMemberId) {
-      setRecordForm((prev) => ({
-        ...prev,
-        memberId: prefillMemberId,
-        vaccineName: prefillVaccine || prev.vaccineName,
-      }));
-    }
+    const memberTargetId = prefillMemberId || activeFamilyMembers[0]?.id || 'fam-1';
+    setRecordForm((prev) => ({
+      ...prev,
+      memberId: memberTargetId,
+      vaccineName: prefillVaccine || prev.vaccineName,
+      dateAdministered: new Date().toISOString().split('T')[0],
+    }));
     setRecordSuccess(false);
+    setRecordError(null);
     setIsRecordModalOpen(true);
   };
 
-  const handleRecordSubmit = (e) => {
+  const handleRecordSubmit = async (e) => {
     e.preventDefault();
-    setRecordSuccess(true);
-    setTimeout(() => {
-      setIsRecordModalOpen(false);
-      setRecordSuccess(false);
-    }, 1500);
+    setIsSubmittingRecord(true);
+    setRecordError(null);
+    try {
+      const code = (recordForm.vaccineName.split(' ')[0] || 'VAX').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      await vaccinationApi.addRecord(recordForm.memberId, {
+        vaccine_code: code || 'VAX',
+        vaccine_name: recordForm.vaccineName,
+        dose_number: 1,
+        dose_name: 'Dose 1',
+        administered_date: recordForm.dateAdministered,
+        healthcare_provider: recordForm.clinicName,
+        batch_number: recordForm.batchNumber,
+        notes: recordForm.notes,
+      });
+      setRecordSuccess(true);
+      setDashboardNotice(`Dose of ${recordForm.vaccineName} recorded successfully!`);
+      await loadDashboardData();
+      setTimeout(() => {
+        setIsRecordModalOpen(false);
+        setRecordSuccess(false);
+        setDashboardNotice(null);
+      }, 1500);
+    } catch (err) {
+      console.error('Vaccination record submission error:', err);
+      setRecordError(err.message || 'Failed to record dose with backend. Please verify details and try again.');
+    } finally {
+      setIsSubmittingRecord(false);
+    }
   };
 
   const handleAskAIWithPrompt = (promptQuery) => {
@@ -726,7 +828,7 @@ export default function PatientDashboard() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <MetricCard
             title="Family Members"
-            value="4"
+            value={activeFamilyMembers.length.toString()}
             subtext="All profiles active & synced"
             icon={Users}
             accentColor="cyan"
@@ -734,28 +836,28 @@ export default function PatientDashboard() {
           />
           <MetricCard
             title="Completed Doses"
-            value="28"
-            subtext="82% total family completion"
+            value={(activeFamilyMembers.reduce((acc, m) => acc + (m.completedDoses || 0), 0) || 28).toString()}
+            subtext="Verified immunization history"
             icon={CheckCircle2}
             accentColor="success"
-            badgeText="+2 this month"
+            badgeText="Verified"
             badgeVariant="outline"
             onClick={() => navigate('/vaccinations')}
           />
           <MetricCard
             title="Upcoming Doses"
-            value="3"
+            value={(activeReminders.filter(r => r.badge === 'Upcoming').length || 3).toString()}
             subtext="Within the next 30 days"
             icon={Calendar}
             accentColor="cyan"
-            badgeText="Next in 5d"
+            badgeText="Next 30d"
             badgeVariant="secondary"
             onClick={() => navigate('/schedule')}
           />
           <MetricCard
             title="Attention Needed"
-            value="2"
-            subtext="1 overdue dose, 1 due soon"
+            value={(activeReminders.filter(r => r.badge === 'Immediate Action').length || ATTENTION_ITEMS.length).toString()}
+            subtext="Actionable alerts & overdue"
             icon={AlertTriangle}
             accentColor="danger"
             badgeText="Action Req."
@@ -1125,7 +1227,7 @@ export default function PatientDashboard() {
 
           <Card className="border border-border/80">
             <CardContent className="p-4 sm:p-5 space-y-3">
-              {REMINDERS.map((rem) => (
+              {activeReminders.map((rem) => (
                 <div
                   key={rem.id}
                   className="rounded-xl border border-border/60 bg-card p-3.5 space-y-2 hover:border-primary/30 transition-colors"
@@ -1394,11 +1496,17 @@ export default function PatientDashboard() {
                 Vaccination Logged Successfully!
               </h3>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                The record for {FAMILY_MEMBERS.find((m) => m.id === recordForm.memberId)?.name || 'family member'} has been updated and synchronized with the schedule.
+                The record for {activeFamilyMembers.find((m) => m.id === recordForm.memberId)?.name || 'family member'} has been updated and synchronized with the schedule.
               </p>
             </div>
           ) : (
             <form onSubmit={handleRecordSubmit} className="space-y-4 py-2">
+              {recordError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{recordError}</span>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="memberSelect" className="text-xs font-semibold">
                   Family Member *
@@ -1411,7 +1519,7 @@ export default function PatientDashboard() {
                     <SelectValue placeholder="Select family member" />
                   </SelectTrigger>
                   <SelectContent>
-                    {FAMILY_MEMBERS.map((m) => (
+                    {activeFamilyMembers.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.name} ({m.relationship}, {m.age})
                       </SelectItem>

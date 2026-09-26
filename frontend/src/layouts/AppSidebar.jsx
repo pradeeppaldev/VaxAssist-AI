@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { 
   ShieldCheck, 
   Sparkles, 
@@ -16,9 +17,88 @@ import { useAuth } from '@/context/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
+/**
+ * DockSidebarItem: Single sidebar menu item with Dock-style magnification physics.
+ * Scales subtly and nudges right when hovered, with nearby items responding proportionally.
+ */
+function DockSidebarItem({ item, isActive, isAI, onNavClick, mouseY }) {
+  const itemRef = useRef(null);
+  const Icon = item.icon;
+
+  // Calculate distance between mouse Y and vertical center of this item
+  const distance = useTransform(mouseY, (val) => {
+    const bounds = itemRef.current?.getBoundingClientRect();
+    if (!bounds || val === Infinity) return 999;
+    const itemCenter = bounds.top + bounds.height / 2;
+    return val - itemCenter;
+  });
+
+  const springConfig = { mass: 0.1, stiffness: 260, damping: 18 };
+
+  // Subtle magnification scale for container
+  const targetScale = useTransform(distance, [-85, 0, 85], [1, 1.04, 1]);
+  const scale = useSpring(targetScale, springConfig);
+
+  // Icon magnification (subtly grows when focused)
+  const targetIconScale = useTransform(distance, [-85, 0, 85], [1, 1.25, 1]);
+  const iconScale = useSpring(targetIconScale, springConfig);
+
+  // Subtle horizontal displacement towards the right
+  const targetX = useTransform(distance, [-85, 0, 85], [0, 4, 0]);
+  const x = useSpring(targetX, springConfig);
+
+  return (
+    <motion.div
+      ref={itemRef}
+      style={{ scale, x, transformOrigin: 'left center' }}
+      className="origin-left"
+    >
+      <NavLink
+        to={item.href}
+        onClick={onNavClick}
+        className={({ isActive: navActive }) => {
+          const active = navActive || isActive;
+          return cn(
+            "group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-colors duration-150 relative",
+            active
+              ? "bg-primary/10 text-primary font-semibold shadow-2xs border-l-3 border-l-primary"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+            isAI && !active && "hover:border-primary/30"
+          );
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <motion.div style={{ scale: iconScale }} className="origin-center">
+            <Icon
+              className={cn(
+                "h-4 w-4 shrink-0 transition-colors",
+                isActive
+                  ? "text-primary"
+                  : isAI
+                  ? "text-primary/70 group-hover:text-primary"
+                  : "text-muted-foreground group-hover:text-foreground"
+              )}
+            />
+          </motion.div>
+          <span className={cn(isAI && "font-sora tracking-tight font-medium")}>
+            {item.title}
+          </span>
+        </div>
+
+        {isAI && (
+          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/15 text-primary tracking-wider uppercase font-mono">
+            AI
+          </span>
+        )}
+      </NavLink>
+    </motion.div>
+  );
+}
+
 export function AppSidebar({ className, onNavClick }) {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const mouseY = useMotionValue(Infinity);
 
   const role = user?.role || 'PATIENT';
   const roleConfig = ROLE_NAVIGATION[role] || ROLE_NAVIGATION.PATIENT;
@@ -45,55 +125,29 @@ export function AppSidebar({ className, onNavClick }) {
         </div>
       </div>
 
-      {/* Navigation List */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+      {/* Main Menu with Dock-Style Interactive Magnification */}
+      <div
+        className="flex-1 overflow-y-auto px-3 py-4 space-y-1 relative"
+        onMouseMove={(e) => mouseY.set(e.clientY)}
+        onMouseLeave={() => mouseY.set(Infinity)}
+      >
         <div className="text-[11px] font-semibold text-muted-foreground px-3 mb-2 uppercase tracking-wider font-mono">
           Main Menu
         </div>
 
         {roleConfig.items.map((item) => {
-          const Icon = item.icon;
           const isAI = item.isAI;
           const isActive = location.pathname === item.href || (item.href !== '/patient/dashboard' && item.href !== '/healthcare/dashboard' && item.href !== '/admin/dashboard' && location.pathname.startsWith(item.href));
 
           return (
-            <NavLink
+            <DockSidebarItem
               key={item.href}
-              to={item.href}
-              onClick={onNavClick}
-              className={({ isActive: navActive }) => {
-                const active = navActive || isActive;
-                return cn(
-                  "group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-150",
-                  active
-                    ? "bg-primary/10 text-primary font-semibold shadow-2xs border-l-3 border-l-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
-                  isAI && !active && "hover:border-primary/30"
-                );
-              }}
-            >
-              <div className="flex items-center gap-3">
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0 transition-colors",
-                    isActive
-                      ? "text-primary"
-                      : isAI
-                      ? "text-primary/70 group-hover:text-primary"
-                      : "text-muted-foreground group-hover:text-foreground"
-                  )}
-                />
-                <span className={cn(isAI && "font-sora tracking-tight")}>
-                  {item.title}
-                </span>
-              </div>
-
-              {isAI && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/15 text-primary tracking-wider uppercase font-mono">
-                  AI
-                </span>
-              )}
-            </NavLink>
+              item={item}
+              isActive={isActive}
+              isAI={isAI}
+              onNavClick={onNavClick}
+              mouseY={mouseY}
+            />
           );
         })}
       </div>
@@ -112,7 +166,7 @@ export function AppSidebar({ className, onNavClick }) {
 
         <button
           onClick={logout}
-          className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+          className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
         >
           <LogOut className="h-3.5 w-3.5" />
           <span>Sign Out</span>

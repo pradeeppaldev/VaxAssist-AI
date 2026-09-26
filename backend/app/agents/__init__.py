@@ -1,0 +1,121 @@
+"""
+VaxAssist AI Multi-Agent Architecture Package.
+Core foundation for specialized clinical and operational AI agents.
+"""
+from app.agents.base import BaseAgent, AgentStatus, AgentExecutionResult, AgentMetadata
+from app.agents.architecture import FIVE_AGENT_ARCHITECTURE, get_agent_architecture_spec
+from app.agents.monitoring import (
+    MonitoringAgent,
+    monitoring_agent,
+    MonitoringAgentInput,
+    MonitoringAgentResult,
+    MemberMonitoringAssessment,
+    DoseAssessmentItem,
+    ActionableMonitoringEvent,
+    DataQualityIssue,
+)
+from app.agents.reminder import (
+    ReminderAgent,
+    reminder_agent,
+    ReminderAgentInput,
+    ReminderAgentResult,
+    DispatchedReminderItem,
+    ReminderStatus,
+)
+from app.agents.knowledge import (
+    KnowledgeAgent,
+    knowledge_agent,
+    KnowledgeAgentInput,
+    KnowledgeAgentResult,
+    KnowledgeSourceCitation,
+    MANDATORY_CLINICAL_DISCLAIMER,
+)
+from app.agents.recommendation import (
+    RecommendationAgent,
+    recommendation_agent,
+    RecommendationAgentInput,
+    RecommendationAgentResult,
+    RecommendationItem,
+    RecommendationPriority,
+    RecommendationCategory,
+    CatchUpPathwayItem,
+    OptionalVaccineGuidance,
+    MemberRecommendation,
+    RECOMMENDATION_CLINICAL_DISCLAIMER,
+)
+
+from app.agents.report import (
+    ReportAgent,
+    report_agent,
+    ReportAgentInput,
+    ReportAgentResult,
+    ReportType,
+    ReportOutputFormat,
+    MANDATORY_REPORT_DISCLAIMER,
+)
+from app.agents.orchestrator import (
+    MultiAgentOrchestrator,
+    multi_agent_orchestrator,
+    OrchestratorInput,
+    OrchestratorResult,
+    OrchestrationWorkflowType,
+    WorkflowStepResult,
+    StepExecutionStatus,
+    WORKFLOW_SPECIFICATIONS,
+)
+
+__all__ = [
+    "BaseAgent",
+    "AgentStatus",
+    "AgentExecutionResult",
+    "AgentMetadata",
+    "FIVE_AGENT_ARCHITECTURE",
+    "get_agent_architecture_spec",
+    "MonitoringAgent",
+    "monitoring_agent",
+    "MonitoringAgentInput",
+    "MonitoringAgentResult",
+    "MemberMonitoringAssessment",
+    "DoseAssessmentItem",
+    "ActionableMonitoringEvent",
+    "DataQualityIssue",
+    "ReminderAgent",
+    "reminder_agent",
+    "ReminderAgentInput",
+    "ReminderAgentResult",
+    "DispatchedReminderItem",
+    "ReminderStatus",
+    "KnowledgeAgent",
+    "knowledge_agent",
+    "KnowledgeAgentInput",
+    "KnowledgeAgentResult",
+    "KnowledgeSourceCitation",
+    "MANDATORY_CLINICAL_DISCLAIMER",
+    "RecommendationAgent",
+    "recommendation_agent",
+    "RecommendationAgentInput",
+    "RecommendationAgentResult",
+    "RecommendationItem",
+    "RecommendationPriority",
+    "RecommendationCategory",
+    "CatchUpPathwayItem",
+    "OptionalVaccineGuidance",
+    "MemberRecommendation",
+    "RECOMMENDATION_CLINICAL_DISCLAIMER",
+    "ReportAgent",
+    "report_agent",
+    "ReportAgentInput",
+    "ReportAgentResult",
+    "ReportType",
+    "ReportOutputFormat",
+    "MANDATORY_REPORT_DISCLAIMER",
+    "MultiAgentOrchestrator",
+    "multi_agent_orchestrator",
+    "OrchestratorInput",
+    "OrchestratorResult",
+    "OrchestrationWorkflowType",
+    "WorkflowStepResult",
+    "StepExecutionStatus",
+    "WORKFLOW_SPECIFICATIONS",
+]
+

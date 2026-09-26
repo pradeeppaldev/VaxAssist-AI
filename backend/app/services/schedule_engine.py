@@ -63,8 +63,19 @@ def calculate_member_schedule(
     Takes member DOB, administered records, reference date, and returns
     structured schedule items with exact due dates and statuses.
     """
+    # 1. Normalize reference_date to datetime.date
     if reference_date is None:
         reference_date = date.today()
+    elif isinstance(reference_date, str):
+        reference_date = date.fromisoformat(reference_date.split("T")[0])
+    elif hasattr(reference_date, "date") and callable(reference_date.date):
+        reference_date = reference_date.date()
+
+    # 2. Normalize date_of_birth to datetime.date
+    if isinstance(date_of_birth, str):
+        date_of_birth = date.fromisoformat(date_of_birth.split("T")[0])
+    elif hasattr(date_of_birth, "date") and callable(date_of_birth.date):
+        date_of_birth = date_of_birth.date()
 
     if catalog is None:
         catalog = get_catalog(
@@ -72,12 +83,14 @@ def calculate_member_schedule(
             include_private_optional=include_private_optional,
         )
 
-    # Normalize existing records
+    # 3. Normalize existing records
     normalized_records = []
     for rec in existing_records:
         adm_date = rec.get("administered_date")
         if isinstance(adm_date, str):
-            adm_date = date.fromisoformat(adm_date)
+            adm_date = date.fromisoformat(adm_date.split("T")[0])
+        elif hasattr(adm_date, "date") and callable(adm_date.date):
+            adm_date = adm_date.date()
         rec_copy = dict(rec)
         rec_copy["administered_date"] = adm_date
         rec_copy["vaccine_code"] = str(rec.get("vaccine_code", "")).strip().upper()

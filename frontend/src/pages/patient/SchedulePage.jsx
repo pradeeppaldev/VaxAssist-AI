@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { familyApi, vaccinationApi } from '@/services/api';
 import {
   CalendarDays,
   Calendar as CalendarIcon,
@@ -70,7 +71,68 @@ export default function SchedulePage() {
 
   // State Management
   const [events, setEvents] = useState(INITIAL_SCHEDULE_EVENTS);
+  const [familyMembers, setFamilyMembers] = useState(INITIAL_FAMILY_MEMBERS);
   const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadScheduleData = async () => {
+      try {
+        const famRes = await familyApi.getMembers();
+        if (isMounted && famRes?.data?.length > 0) {
+          const membersList = famRes.data.map((m) => ({
+            id: m.id,
+            name: m.full_name,
+            relationship: m.relationship,
+            dob: m.date_of_birth,
+          }));
+          setFamilyMembers(membersList);
+
+          // Fetch schedule for all family members
+          try {
+            const allSchResults = await Promise.allSettled(
+              membersList.map((m) => vaccinationApi.getMemberSchedule(m.id))
+            );
+            const allLiveEvents = [];
+            allSchResults.forEach((res, idx) => {
+              const currentMember = membersList[idx];
+              if (res.status === 'fulfilled' && res.value?.data?.items?.length > 0) {
+                res.value.data.items.forEach((item, itemIdx) => {
+                  const dateStr = item.due_date || new Date().toISOString().split('T')[0];
+                  const dateObj = new Date(dateStr);
+                  allLiveEvents.push({
+                    id: `sch-${currentMember.id}-${itemIdx}`,
+                    memberId: currentMember.id,
+                    memberName: currentMember.name,
+                    memberRelation: currentMember.relationship,
+                    vaccineName: item.vaccine_name || item.vaccine_code,
+                    dose: item.dose_name || `Dose ${item.dose_number || 1}`,
+                    scheduledDate: dateStr,
+                    formattedDate: isNaN(dateObj.getTime()) ? 'Scheduled' : dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }),
+                    status: item.status || 'UPCOMING',
+                    clinic: 'Lilavati Hospital & Research Centre, Mumbai',
+                    provider: 'Dr. Anjali Deshmukh',
+                    notes: item.notes || 'Universal Immunization Programme schedule.',
+                  });
+                });
+              }
+            });
+            if (isMounted && allLiveEvents.length > 0) {
+              setEvents(allLiveEvents);
+            }
+          } catch (sErr) {
+            // Keep initial demo schedule
+          }
+        }
+      } catch (err) {
+        // Keep initial demo schedule
+      }
+    };
+    loadScheduleData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Filter States
   const [selectedMemberId, setSelectedMemberId] = useState('ALL');
@@ -566,8 +628,8 @@ export default function SchedulePage() {
                     <SelectValue placeholder="All Family Members" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL">All Family Members (4 Profiles)</SelectItem>
-                    {INITIAL_FAMILY_MEMBERS.map((m) => (
+                    <SelectItem value="ALL">All Family Members ({familyMembers.length} Profiles)</SelectItem>
+                    {familyMembers.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.name} ({m.relationship})
                       </SelectItem>

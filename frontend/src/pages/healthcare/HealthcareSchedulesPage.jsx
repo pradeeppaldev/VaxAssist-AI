@@ -406,7 +406,7 @@ export default function HealthcareSchedulesPage() {
                   <div className="space-y-1.5 text-xs">
                     <div className="p-2.5 rounded-lg bg-secondary/40 flex justify-between items-center">
                       <div>
-                        <strong>Anaya Pal (4 yrs)</strong> — DPT Booster 1 Clinic Session
+                        <strong>Ananya Sharma (4 mos)</strong> — 14-Week Pentavalent & OPV Session
                       </div>
                       <span className="font-mono text-muted-foreground">09:30 AM</span>
                     </div>

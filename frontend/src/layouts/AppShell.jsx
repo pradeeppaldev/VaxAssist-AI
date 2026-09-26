@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import AppHeader from './AppHeader';
+import { OfflineNoticeBanner } from '@/components/common/OfflineNoticeBanner';
 import AppSidebar from './AppSidebar';
 import MobileBottomNav from './MobileBottomNav';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
@@ -8,11 +10,15 @@ import ErrorBoundary from '@/components/common/ErrorBoundary';
 
 export function AppShell() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground transition-colors duration-200">
       {/* Top Application Header */}
       <AppHeader onToggleMobileMenu={() => setMobileMenuOpen(true)} />
+
+      {/* Global Offline and Sync Alert Banner */}
+      <OfflineNoticeBanner />
 
       {/* Main Workspace Body */}
       <div className="flex-1 flex max-w-7xl mx-auto w-full">
@@ -30,11 +36,18 @@ export function AppShell() {
           </SheetContent>
         </Sheet>
 
-        {/* Main Content Area */}
+        {/* Main Content Area with Framer Motion Page Transition */}
         <main className="flex-1 min-w-0 px-4 py-6 sm:px-6 lg:px-8 pb-20 md:pb-8">
           <div className="mx-auto max-w-5xl space-y-6">
             <ErrorBoundary>
-              <Outlet />
+              <motion.div
+                key={location.pathname}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+              >
+                <Outlet />
+              </motion.div>
             </ErrorBoundary>
           </div>
         </main>

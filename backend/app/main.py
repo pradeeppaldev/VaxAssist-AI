@@ -24,11 +24,24 @@ async def lifespan(app: FastAPI):
         from app.services.user_service import user_service
         from app.services.family_service import family_service
         from app.services.vaccination_service import vaccination_service
+        from app.services.notification_service import notification_service
+        from app.services.knowledge_service import knowledge_service
+        from app.services.vector_store import vector_store
+        from app.services.monitoring_scheduler import monitoring_scheduler
         await user_service.bootstrap_admin()
         await family_service.init_indexes()
         await vaccination_service.init_indexes()
+        await notification_service.init_indexes()
+        await knowledge_service.init_indexes()
+        vector_store.verify_persistence()
+        monitoring_scheduler.start()
     yield
-    # Shutdown: Close database connections
+    # Shutdown: Stop scheduler and close database connections
+    try:
+        from app.services.monitoring_scheduler import monitoring_scheduler
+        await monitoring_scheduler.stop()
+    except Exception as e:
+        logger.warning(f"Error stopping scheduler: {e}")
     logger.info("Shutting down VaxAssist AI application...")
     await db_manager.disconnect()
 

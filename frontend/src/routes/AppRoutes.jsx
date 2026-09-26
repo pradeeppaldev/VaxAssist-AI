@@ -13,6 +13,16 @@ import FaqPage from '../pages/public/FaqPage';
 import SystemTestPage from '../pages/SystemTestPage';
 import NotFoundPage from '../pages/NotFoundPage';
 
+// Legal & Informational Pages
+import TermsPage from '../pages/public/TermsPage';
+import PrivacyPage from '../pages/public/PrivacyPage';
+import MedicalDisclaimerPage from '../pages/public/MedicalDisclaimerPage';
+import AITransparencyPage from '../pages/public/AITransparencyPage';
+import SecurityPage from '../pages/public/SecurityPage';
+import CookiePolicyPage from '../pages/public/CookiePolicyPage';
+import AccessibilityPage from '../pages/public/AccessibilityPage';
+import ContactPage from '../pages/public/ContactPage';
+
 // Auth Pages
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
@@ -75,6 +85,16 @@ export default function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/system-test" element={<SystemTestPage />} />
+
+        {/* Legal & Informational Pages */}
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/medical-disclaimer" element={<MedicalDisclaimerPage />} />
+        <Route path="/ai-transparency" element={<AITransparencyPage />} />
+        <Route path="/security" element={<SecurityPage />} />
+        <Route path="/cookies" element={<CookiePolicyPage />} />
+        <Route path="/accessibility" element={<AccessibilityPage />} />
+        <Route path="/contact" element={<ContactPage />} />
       </Route>
 
       {/* 2. AUTHENTICATED APPLICATION SHELL ROUTES */}

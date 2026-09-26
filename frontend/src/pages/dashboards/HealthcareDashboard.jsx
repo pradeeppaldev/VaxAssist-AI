@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { vaccinationApi } from '@/services/api';
 import {
   Stethoscope,
   BadgeCheck,
@@ -81,6 +83,17 @@ import {
 
 export default function HealthcareDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const activeDoctorName = user?.name || MOCK_HEALTHCARE_WORKER.name;
+  const activeHospital = user?.clinic_or_hospital || MOCK_HEALTHCARE_WORKER.clinicOrHospital;
+  const activeLicense = user?.license_number || MOCK_HEALTHCARE_WORKER.licenseNumber;
+  const currentDateFormatted = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 
   // Interactive View Modes: 'normal' | 'loading' | 'empty' | 'error'
   const [viewState, setViewState] = useState('normal');
@@ -95,17 +108,18 @@ export default function HealthcareDashboard() {
     patientId: 'pat-1',
     vaccine: 'Measles-Rubella (MR - Dose 1)',
     doseNumber: 'Dose 1',
-    adminDate: '2026-09-25',
+    adminDate: new Date().toISOString().split('T')[0],
     batchNumber: 'MR-7782A-IND',
     site: 'Left Deltoid (IM)',
-    provider: 'Dr. Sunita Sharma',
-    facility: 'Primary Health Center North',
+    provider: activeDoctorName,
+    facility: activeHospital,
     notes: 'Administered under Universal Immunization Programme. Child tolerated well, no acute reactions during 30 min observation.',
     issueCertificate: true,
   });
 
   const [isSubmittingRecord, setIsSubmittingRecord] = useState(false);
   const [recordSubmitSuccess, setRecordSubmitSuccess] = useState(false);
+  const [recordError, setRecordError] = useState(null);
 
   // Pending Reviews state (allows dismissing / verifying items in UI)
   const [pendingReviews, setPendingReviews] = useState(MOCK_PENDING_REVIEWS);
@@ -121,17 +135,38 @@ export default function HealthcareDashboard() {
   };
 
   // Handle Record Submit
-  const handleRecordSubmit = (e) => {
+  const handleRecordSubmit = async (e) => {
     e.preventDefault();
     setIsSubmittingRecord(true);
-    setTimeout(() => {
-      setIsSubmittingRecord(false);
+    setRecordError(null);
+    try {
+      const doseMatch = recordForm.doseNumber.match(/\d+/);
+      const doseNum = doseMatch ? parseInt(doseMatch[0], 10) : 1;
+      const codeMatch = recordForm.vaccine.match(/\(([^)]+)\)/);
+      const vaxCode = codeMatch ? codeMatch[1].replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase() : recordForm.vaccine.split(' ')[0].toUpperCase();
+
+      await vaccinationApi.addRecord(recordForm.patientId, {
+        vaccine_code: vaxCode || 'MR',
+        vaccine_name: recordForm.vaccine,
+        dose_number: doseNum,
+        dose_name: recordForm.doseNumber,
+        administered_date: recordForm.adminDate,
+        healthcare_provider: recordForm.provider,
+        batch_number: recordForm.batchNumber,
+        notes: recordForm.notes,
+      });
       setRecordSubmitSuccess(true);
-    }, 1000);
+    } catch (err) {
+      console.error('Backend record registration error:', err);
+      setRecordError(err.message || 'Failed to record dose with backend. Please verify details and try again.');
+    } finally {
+      setIsSubmittingRecord(false);
+    }
   };
 
   const handleResetRecordModal = () => {
     setRecordSubmitSuccess(false);
+    setRecordError(null);
     setIsSubmittingRecord(false);
     setIsRecordModalOpen(false);
   };
@@ -214,7 +249,7 @@ export default function HealthcareDashboard() {
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sans">
-                Good morning, {MOCK_HEALTHCARE_WORKER.name}
+                Good morning, {activeDoctorName}
               </h1>
               <Badge
                 variant="outline"
@@ -230,15 +265,15 @@ export default function HealthcareDashboard() {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground pt-1">
               <span className="flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Wednesday, 25 September 2026</span>
+                <span>{currentDateFormatted}</span>
               </span>
               <span>•</span>
               <span className="flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>{MOCK_HEALTHCARE_WORKER.clinicOrHospital}</span>
+                <span>{activeHospital}</span>
               </span>
               <span>•</span>
-              <span className="font-mono text-[11px]">Lic: {MOCK_HEALTHCARE_WORKER.licenseNumber}</span>
+              <span className="font-mono text-[11px]">Lic: {activeLicense}</span>
             </div>
           </div>
 
@@ -570,6 +605,13 @@ export default function HealthcareDashboard() {
                   Official clinical entry under Universal Immunization Programme (UIP). Digitally logged to patient record.
                 </DialogDescription>
               </DialogHeader>
+
+              {recordError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{recordError}</span>
+                </div>
+              )}
 
               <div className="space-y-3.5 py-1 text-xs">
                 {/* Patient Selection */}

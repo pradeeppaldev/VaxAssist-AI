@@ -69,11 +69,50 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { MOCK_ADMIN_USERS } from '@/data/mockAdminData';
+import { adminApi } from '@/services/api';
 
 export function AdminUsersPage() {
-  const [users, setUsers] = useState(MOCK_ADMIN_USERS);
-  const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
+  const [users, setUsers] = useState([]);
+  const [viewState, setViewState] = useState('loading'); // 'normal' | 'loading' | 'empty' | 'error'
+
+  const loadBackendUsers = React.useCallback(async () => {
+    try {
+      const res = await adminApi.getUsers();
+      if (res?.data && Array.isArray(res.data)) {
+        const mapped = res.data.map((u) => {
+          let roleLabel = 'Patient / Family';
+          if (u.role === 'HEALTHCARE_WORKER') roleLabel = 'Healthcare Professional';
+          if (u.role === 'ADMIN') roleLabel = 'System Administrator';
+          return {
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+            roleLabel,
+            account_status: u.account_status,
+            organization: u.clinic_or_hospital || 'VaxAssist Health Network',
+            phone: u.phone_number || '',
+            registeredDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Active',
+            licenseNumber: u.license_number || '',
+            activityStatus: u.account_status === 'ACTIVE' ? 'Active' : u.account_status,
+            notes: u.status_reason || '',
+          };
+        });
+        setUsers(mapped);
+        setViewState(mapped.length === 0 ? 'empty' : 'normal');
+      } else {
+        setUsers([]);
+        setViewState('empty');
+      }
+    } catch (err) {
+      console.warn('Failed to load users from backend:', err);
+      setViewState('empty');
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadBackendUsers();
+  }, [loadBackendUsers]);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -122,28 +161,24 @@ export function AdminUsersPage() {
     setManageModalOpen(true);
   };
 
-  const executeStatusUpdate = () => {
+  const executeStatusUpdate = async () => {
     if (!selectedUser) return;
 
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === selectedUser.id) {
-          const updated = {
-            ...u,
-            role: newRole,
-            account_status: newStatus,
-          };
-          if (newRole === 'PATIENT') updated.roleLabel = 'Patient / Family';
-          if (newRole === 'HEALTHCARE_WORKER') updated.roleLabel = 'Healthcare Professional';
-          if (newRole === 'ADMIN') updated.roleLabel = 'System Administrator';
-          if (newStatus === 'SUSPENDED') updated.suspendedReason = auditReason || 'Administrative suspension';
-          return updated;
-        }
-        return u;
-      })
-    );
+    try {
+      if (newRole && newRole !== selectedUser.role) {
+        await adminApi.updateUserRole(selectedUser.id, newRole);
+      }
+      if (newStatus && newStatus !== selectedUser.account_status) {
+        const backendStatus = newStatus === 'SUSPENDED' ? 'INACTIVE' : newStatus;
+        await adminApi.updateUserStatus(selectedUser.id, backendStatus, auditReason || 'Status update via Admin Users Console');
+      }
+      await loadBackendUsers();
+      setNoticeMessage(`Account for ${selectedUser.name} updated to ${newStatus} (${newRole}).`);
+    } catch (err) {
+      console.error('Error saving user updates to backend:', err);
+      setNoticeMessage(`Failed to update user: ${err.message || 'Operation failed'}`);
+    }
 
-    setNoticeMessage(`Account for ${selectedUser.name} updated to ${newStatus} (${newRole}).`);
     setManageModalOpen(false);
     setConfirmSuspendOpen(false);
     setTimeout(() => setNoticeMessage(null), 4000);

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { 
   ShieldCheck, 
   Sparkles, 
@@ -34,6 +35,12 @@ import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/healthcare/StatusBadge';
 import { AICard, AIHeader, AISourceCitation } from '@/components/ai/AIComponents';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import DotGrid from '@/components/ui/DotGrid';
+import DecryptedText from '@/components/ui/DecryptedText';
+import SpotlightCard from '@/components/ui/SpotlightCard';
+import ColorBends from '@/components/ui/ColorBends';
+import SoftAurora from '@/components/ui/SoftAurora';
+import Comparison from '@/components/ui/Comparison';
 
 export default function HomePage() {
   return (
@@ -42,11 +49,31 @@ export default function HomePage() {
       {/* ============================================================ */}
       {/* 6. HERO SECTION                                              */}
       {/* ============================================================ */}
-      <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center">
+      <section className="relative container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl overflow-hidden rounded-3xl">
+        {/* Real DotGrid background layer positioned behind hero content */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 opacity-100">
+          <DotGrid
+            dotSize={1}
+            gap={15}
+            baseColor="#d4d4d8"
+            activeColor="#7c3aed"
+            proximity={120}
+            shockRadius={250}
+            shockStrength={5}
+            resistance={750}
+            returnDuration={1.5}
+          />
+        </div>
+
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-center py-2 sm:py-6">
           
           {/* Left Column: Hero Text & CTAs */}
-          <div className="lg:col-span-7 space-y-6 sm:space-y-8">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="lg:col-span-7 space-y-6 sm:space-y-8"
+          >
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs sm:text-sm font-semibold text-primary select-none">
               <ShieldCheck className="h-4 w-4" />
               <span>National Immunization Schedule &bull; UIP Grounded</span>
@@ -55,9 +82,19 @@ export default function HomePage() {
             <div className="space-y-4">
               <h1 className="font-itim text-4xl sm:text-5xl lg:text-6xl tracking-tight text-foreground leading-[1.15]">
                 Vaccination care, organized for your{' '}
-                <span className="text-primary underline decoration-primary/30 decoration-wavy decoration-2">
-                  whole family.
+                <span className="text-primary underline decoration-primary/30 decoration-wavy decoration-2 inline-block">
+                  <DecryptedText
+                    text="whole family"
+                    animateOn="view"
+                    revealDirection="start"
+                    sequential
+                    useOriginalCharsOnly={false}
+                    interval={5000}
+                    className="text-primary"
+                    encryptedClassName="text-primary/70 font-mono"
+                  />
                 </span>
+                .
               </h1>
               <p className="text-base sm:text-lg text-muted-foreground leading-relaxed max-w-2xl font-sans">
                 Manage vaccination records, schedules, automated reminders, healthcare verification, and AI-powered guidance in one trusted, unified place.
@@ -92,89 +129,176 @@ export default function HomePage() {
                 <span>Official Guideline Grounding</span>
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Right Column: High-Quality Product UI Preview */}
-          <div className="lg:col-span-5">
-            <div className="relative mx-auto max-w-md lg:max-w-none rounded-2xl border border-border bg-card p-5 sm:p-7 shadow-xl transition-all">
+          {/* Right Column: Simplified 3D Floating Family Vaccination Overview */}
+          <div className="lg:col-span-5 relative py-4 lg:py-0">
+            <div className="relative mx-auto max-w-md lg:max-w-none [perspective:1200px]">
               
-              {/* Mock Window Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-border/80">
-                <div className="flex items-center gap-2">
-                  <div className="h-3 w-3 rounded-full bg-rose-400/80" />
-                  <div className="h-3 w-3 rounded-full bg-amber-400/80" />
-                  <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
-                  <span className="text-xs font-mono text-muted-foreground ml-2">vaxassist.care/dashboard</span>
-                </div>
-                <Badge variant="outline" className="text-xs font-mono border-primary/30 text-primary">
-                  Family Active
-                </Badge>
-              </div>
+              {/* Floating Decorative Chip: Auto-Scheduled (Top-Right) */}
+              <motion.div
+                animate={{ y: [0, -6, 0], x: [0, 2, 0] }}
+                transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
+                className="absolute -top-3.5 right-2 sm:-right-2 z-20 flex items-center gap-1.5 rounded-full bg-background/95 border border-primary/30 px-3 py-1 text-xs font-semibold text-primary shadow-lg shadow-primary/10 backdrop-blur-md"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span>Auto-Scheduled</span>
+              </motion.div>
 
-              {/* Family Members Selector Preview */}
-              <div className="pt-5 space-y-4">
-                <div className="flex items-center gap-2.5 overflow-x-auto pb-1">
-                  <div className="flex items-center gap-2 rounded-xl bg-primary/10 border border-primary/30 px-3.5 py-2 shrink-0 text-sm font-bold text-primary shadow-2xs">
-                    <span className="h-2 w-2 rounded-full bg-primary" />
-                    <span>Aarav (9 mo)</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-xl bg-muted/60 border border-border px-3.5 py-2 shrink-0 text-sm text-muted-foreground">
-                    <span>Diya (4 yr)</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-xl bg-muted/60 border border-border px-3.5 py-2 shrink-0 text-sm text-muted-foreground">
-                    <span>Self</span>
-                  </div>
-                </div>
+              {/* Floating Decorative Chip: Protection Active (Bottom-Left) */}
+              <motion.div
+                animate={{ y: [0, 6, 0], x: [0, -2, 0] }}
+                transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
+                className="absolute -bottom-3 left-2 sm:-left-3 z-20 flex items-center gap-1.5 rounded-full bg-background/95 border border-emerald-500/30 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 shadow-lg shadow-emerald-500/10 backdrop-blur-md"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                <span>Protection Active</span>
+              </motion.div>
 
-                {/* Priority Vaccination Due Card */}
-                <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 sm:p-5 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base font-bold text-foreground font-sans">MR-1 (Measles &amp; Rubella)</span>
-                        <span className="text-xs font-mono uppercase bg-primary/15 text-primary px-2 py-0.5 rounded font-bold">
-                          Dose 1
-                        </span>
+              {/* Main 3D Floating Card Container */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ 
+                  opacity: 1, 
+                  y: [-3, 5, -3],
+                  rotateX: [3, 4.5, 3],
+                  rotateY: [-4, -2.5, -4]
+                }}
+                transition={{ 
+                  opacity: { duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 0.15 },
+                  y: { duration: 6, repeat: Infinity, ease: 'easeInOut' },
+                  rotateX: { duration: 6, repeat: Infinity, ease: 'easeInOut' },
+                  rotateY: { duration: 6, repeat: Infinity, ease: 'easeInOut' }
+                }}
+                whileHover={{ 
+                  rotateX: 0, 
+                  rotateY: 0, 
+                  y: -2, 
+                  transition: { duration: 0.3 } 
+                }}
+                style={{ transformStyle: 'preserve-3d' }}
+                className="relative group cursor-default"
+              >
+                {/* Outward light glow extending around and below the card */}
+                <div
+                  className="absolute -inset-3 rounded-3xl bg-gradient-to-b from-primary/20 via-cyan-400/20 to-teal-400/15 blur-2xl opacity-60 dark:opacity-40 pointer-events-none -z-10 group-hover:opacity-85 transition-opacity duration-500"
+                  aria-hidden="true"
+                />
+                <div
+                  className="absolute -bottom-6 inset-x-6 h-16 bg-gradient-to-r from-primary/30 via-cyan-400/25 to-blue-500/25 blur-2xl rounded-full pointer-events-none -z-10"
+                  aria-hidden="true"
+                />
+
+                <div 
+                  className="relative rounded-3xl border border-border/80 bg-card/95 backdrop-blur-md p-5 sm:p-6 shadow-2xl shadow-primary/10 space-y-4"
+                  style={{ transform: 'translateZ(10px)' }}
+                >
+                  {/* Header: Family Vaccination Overview */}
+                  <div className="flex items-center justify-between pb-3.5 border-b border-border/60">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                        <Users className="h-5 w-5" />
                       </div>
-                      <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                        Due at completion of 9 months &bull; Left Upper Arm (Subcutaneous)
-                      </p>
+                      <div>
+                        <h3 className="font-bold text-foreground text-base tracking-tight font-sora">
+                          Family Vaccination Overview
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          3 members · Vaccinations tracked
+                        </p>
+                      </div>
                     </div>
-                    <StatusBadge status="DUE" />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs sm:text-sm pt-2 border-t border-primary/15 text-muted-foreground">
-                    <span className="flex items-center gap-1.5 text-primary font-medium">
-                      <Clock className="h-4 w-4" />
-                      <span>Window: 9 to 12 months</span>
-                    </span>
-                    <span className="font-semibold text-foreground">Recommended Now</span>
-                  </div>
-                </div>
-
-                {/* Progress Metric */}
-                <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2.5">
-                  <div className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="font-medium text-muted-foreground">UIP Immunization Progress</span>
-                    <span className="font-bold text-foreground font-mono">8 of 11 Completed (73%)</span>
-                  </div>
-                  <Progress value={73} className="h-2.5 bg-secondary" indicatorClassName="bg-primary" />
-                </div>
-
-                {/* Grounded Assistant Snippet */}
-                <div className="rounded-xl border border-border bg-card p-3.5 space-y-1.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-foreground font-sora">
-                      <Sparkles className="h-4 w-4 text-primary" />
-                      <span>AI Schedule Monitor</span>
+                    <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Live</span>
                     </div>
-                    <span className="text-xs text-muted-foreground font-mono">NIS Grounded</span>
                   </div>
-                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                    "JE-1 is also due if residing in an identified Japanese Encephalitis endemic district."
-                  </p>
+
+                  {/* 3 Simple Profile Rows */}
+                  <div className="space-y-2.5">
+                    {/* 1. Aarav (Due now) */}
+                    <div className="flex items-center justify-between p-3 rounded-2xl bg-rose-500/5 border border-rose-500/25 transition-all hover:bg-rose-500/10">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center font-bold text-xs text-rose-600 dark:text-rose-400 shrink-0">
+                          A
+                        </div>
+                        <div className="truncate">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-sm text-foreground">Aarav</span>
+                            <span className="text-xs text-muted-foreground">(9 months)</span>
+                          </div>
+                          <p className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                            MR-1 Vaccine
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 rounded-full bg-rose-500/15 border border-rose-500/30 px-2.5 py-1 text-xs font-bold text-rose-600 dark:text-rose-400 shrink-0 shadow-2xs">
+                        <Clock className="h-3 w-3 shrink-0" />
+                        <span>Due now</span>
+                      </div>
+                    </div>
+
+                    {/* 2. Diya (Up to date) */}
+                    <div className="flex items-center justify-between p-3 rounded-2xl bg-muted/40 border border-border/70 transition-all hover:bg-muted/60">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center font-bold text-xs text-emerald-600 dark:text-emerald-400 shrink-0">
+                          D
+                        </div>
+                        <div className="truncate">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-sm text-foreground">Diya</span>
+                            <span className="text-xs text-muted-foreground">(4 years)</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground font-medium">
+                            All doses completed
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+                        <span>Up to date ✓</span>
+                      </div>
+                    </div>
+
+                    {/* 3. Self (Next vaccination) */}
+                    <div className="flex items-center justify-between p-3 rounded-2xl bg-muted/40 border border-border/70 transition-all hover:bg-muted/60">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-xl bg-primary/15 border border-primary/30 flex items-center justify-center font-bold text-xs text-primary shrink-0">
+                          S
+                        </div>
+                        <div className="truncate">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-sm text-foreground">Self</span>
+                            <span className="text-xs text-muted-foreground">(Adult)</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground font-medium">
+                            Next vaccination · 18 Oct
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 rounded-full bg-primary/10 border border-primary/25 px-2.5 py-1 text-xs font-medium text-primary shrink-0">
+                        <Calendar className="h-3 w-3 shrink-0" />
+                        <span>18 Oct</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Metric */}
+                  <div className="rounded-2xl border border-border/70 bg-muted/30 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-muted-foreground">Household Coverage</span>
+                      <span className="font-bold text-foreground font-mono">8 of 11 Completed (73%)</span>
+                    </div>
+                    <Progress value={73} className="h-2 bg-secondary" indicatorClassName="bg-primary" />
+                  </div>
+
+                  {/* Bottom Notification Alert */}
+                  <div className="flex items-center gap-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 px-3.5 py-2.5 text-xs text-amber-700 dark:text-amber-300 font-medium">
+                    <Bell className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>1 vaccination needs your attention</span>
+                  </div>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </div>
 
@@ -212,193 +336,132 @@ export default function HomePage() {
       </section>
 
       {/* ============================================================ */}
-      {/* 8. PROBLEM SECTION                                           */}
+      {/* 8. PROBLEM & COMPARISON SECTION                              */}
+      {/* React Bits Comparison-4 Component                            */}
       {/* ============================================================ */}
-      <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
-        <div className="text-center space-y-3 max-w-2xl mx-auto mb-12">
-          <Badge variant="outline" className="border-border text-xs uppercase tracking-wider font-mono">
-            The Healthcare Challenge
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground font-sans">
-            Vaccination information shouldn't be scattered.
-          </h2>
-          <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-            Traditional paper immunization cards and fragmented clinic records create confusion, missed milestone windows, and clinical blind spots.
-          </p>
-        </div>
-
-        {/* Structured Side-by-Side Comparison */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch">
-          
-          {/* The Traditional Problem */}
-          <div className="rounded-2xl border border-destructive/20 bg-destructive/[0.02] p-6 sm:p-8 space-y-6 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-destructive font-semibold text-sm">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="uppercase tracking-wider font-mono text-xs font-bold">The Scattered Reality</span>
-              </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-foreground font-sans">
-                Paper cards get lost, milestones get overlooked.
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                When health records are stored in paper booklets or across different clinics, families are left guessing which doses are pending and when boosters are required.
-              </p>
-            </div>
-
-            <ul className="space-y-3.5 text-sm text-muted-foreground border-t border-destructive/15 pt-5">
-              <li className="flex items-start gap-2.5">
-                <span className="h-2 w-2 rounded-full bg-destructive mt-1.5 shrink-0" />
-                <span>Physical vaccination booklets are frequently lost, water-damaged, or unavailable during travel.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="h-2 w-2 rounded-full bg-destructive mt-1.5 shrink-0" />
-                <span>Managing schedules for multiple children and elderly parents becomes overwhelmingly chaotic.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="h-2 w-2 rounded-full bg-destructive mt-1.5 shrink-0" />
-                <span>Families miss crucial immunization windows due to lack of proactive reminders.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <span className="h-2 w-2 rounded-full bg-destructive mt-1.5 shrink-0" />
-                <span>Confusing internet advice causes hesitation over intervals and contraindications.</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* The VaxAssist Approach */}
-          <div className="rounded-2xl border border-primary/30 bg-primary/[0.03] p-6 sm:p-8 space-y-6 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-primary font-semibold text-sm">
-                <ShieldCheck className="h-4 w-4 shrink-0" />
-                <span className="uppercase tracking-wider font-mono text-xs font-bold">The VaxAssist Standard</span>
-              </div>
-              <h3 className="text-xl sm:text-2xl font-bold text-foreground font-sans">
-                Deterministic schedules, automated alerts, total clarity.
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                VaxAssist calculates exact milestone dates directly from date of birth, tracks multiple family dependents, and pairs records with verified clinical guidance.
-              </p>
-            </div>
-
-            <ul className="space-y-3.5 text-sm text-muted-foreground border-t border-primary/20 pt-5">
-              <li className="flex items-start gap-2.5">
-                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <span>Permanent digital immunization ledger accessible from any device at any time.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <span>Unified household overview with dynamic age calculation for each dependent.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <span>Automated milestone reminders prevent missed booster windows before they occur.</span>
-              </li>
-              <li className="flex items-start gap-2.5">
-                <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                <span>Answers grounded in authoritative national immunization manuals and WHO standards.</span>
-              </li>
-            </ul>
-          </div>
-
-        </div>
-      </section>
+      <Comparison />
 
       {/* ============================================================ */}
       {/* 9. CORE FEATURES SECTION                                     */}
       {/* ============================================================ */}
       <section id="features" className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl scroll-mt-24">
-        <div className="text-center space-y-3 max-w-2xl mx-auto mb-12">
-          <Badge variant="outline" className="border-primary/30 text-primary text-xs uppercase tracking-wider font-mono">
-            Platform Capabilities
-          </Badge>
-          <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground font-sans">
-            Complete Digital Immunization Suite
-          </h2>
-          <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
-            Six cohesive pillars built to ensure seamless tracking, clinical precision, and proactive family health management.
-          </p>
-        </div>
+        <div className="relative rounded-3xl border border-border/80 bg-muted/10 p-6 sm:p-10 lg:p-12 overflow-hidden shadow-2xs">
+          {/* React Bits ColorBends visual background layer */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-25 dark:opacity-35 z-0 rounded-3xl">
+            <ColorBends
+              colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
+              rotation={90}
+              speed={0.2}
+              scale={1}
+              frequency={1}
+              warpStrength={1}
+              mouseInfluence={1}
+              noise={0.15}
+              parallax={0.5}
+              iterations={1}
+              intensity={1.5}
+              bandWidth={6}
+              transparent
+              autoRotate={0}
+              color="#A855F7"
+            />
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          
-          {/* Feature 1 */}
-          <Card className="border-border bg-card hover:border-primary/40 transition-colors shadow-2xs">
-            <CardHeader className="p-6 pb-3 space-y-3">
-              <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
-                <Users className="h-5 w-5" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl font-bold font-sans">Family Vaccination Management</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 pt-0 text-sm text-muted-foreground leading-relaxed">
-              Track vaccination histories for multiple children, spouses, self, and elderly dependents under one household hub. Dynamic age calculations adjust over time.
-            </CardContent>
-          </Card>
+          <div className="relative z-10 space-y-12">
+            <div className="text-center space-y-3 max-w-2xl mx-auto">
+              <Badge variant="outline" className="border-primary/30 text-primary text-xs uppercase tracking-wider font-mono">
+                Platform Capabilities
+              </Badge>
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground font-sans">
+                Complete Digital Immunization Suite
+              </h2>
+              <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                Six cohesive pillars built to ensure seamless tracking, clinical precision, and proactive family health management.
+              </p>
+            </div>
 
-          {/* Feature 2 */}
-          <Card className="border-border bg-card hover:border-primary/40 transition-colors shadow-2xs">
-            <CardHeader className="p-6 pb-3 space-y-3">
-              <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
-                <Calendar className="h-5 w-5" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl font-bold font-sans">Smart Scheduling &amp; Reminders</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 pt-0 text-sm text-muted-foreground leading-relaxed">
-              Calculates upcoming, due, and overdue vaccination windows deterministically. Automated reminder sequences notify families before milestone windows elapse.
-            </CardContent>
-          </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              
+              {/* Feature 1 */}
+              <SpotlightCard className="border border-border bg-card/90 hover:border-primary/40 transition-colors shadow-2xs rounded-2xl p-6 flex flex-col justify-between" spotlightColor="rgba(21, 194, 217, 0.18)">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold font-sans text-foreground">Family Vaccination Management</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Track vaccination histories for multiple children, spouses, self, and elderly dependents under one household hub. Dynamic age calculations adjust over time.
+                  </p>
+                </div>
+              </SpotlightCard>
 
-          {/* Feature 3 */}
-          <Card className="border-border bg-card hover:border-primary/40 transition-colors shadow-2xs">
-            <CardHeader className="p-6 pb-3 space-y-3">
-              <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl font-bold font-sans font-sora">AI Vaccination Assistant</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 pt-0 text-sm text-muted-foreground leading-relaxed">
-              Ask vaccination-related questions and receive personalized guidance grounded in your active family member's age and verified immunization manuals.
-            </CardContent>
-          </Card>
+              {/* Feature 2 */}
+              <SpotlightCard className="border border-border bg-card/90 hover:border-primary/40 transition-colors shadow-2xs rounded-2xl p-6 flex flex-col justify-between" spotlightColor="rgba(21, 194, 217, 0.18)">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
+                    <Calendar className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold font-sans text-foreground">Smart Scheduling &amp; Reminders</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Calculates upcoming, due, and overdue vaccination windows deterministically. Automated reminder sequences notify families before milestone windows elapse.
+                  </p>
+                </div>
+              </SpotlightCard>
 
-          {/* Feature 4 */}
-          <Card className="border-border bg-card hover:border-primary/40 transition-colors shadow-2xs">
-            <CardHeader className="p-6 pb-3 space-y-3">
-              <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
-                <BookOpen className="h-5 w-5" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl font-bold font-sans">Trusted Knowledge</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 pt-0 text-sm text-muted-foreground leading-relaxed">
-              AI responses are grounded in verified guidelines from the Universal Immunization Programme (UIP) and WHO documentation, preventing misleading hallucinations.
-            </CardContent>
-          </Card>
+              {/* Feature 3 */}
+              <SpotlightCard className="border border-border bg-card/90 hover:border-primary/40 transition-colors shadow-2xs rounded-2xl p-6 flex flex-col justify-between" spotlightColor="rgba(21, 194, 217, 0.18)">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold font-sans font-sora text-foreground">AI Vaccination Assistant</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Ask vaccination-related questions and receive personalized guidance grounded in your active family member's age and verified immunization manuals.
+                  </p>
+                </div>
+              </SpotlightCard>
 
-          {/* Feature 5 */}
-          <Card className="border-border bg-card hover:border-primary/40 transition-colors shadow-2xs">
-            <CardHeader className="p-6 pb-3 space-y-3">
-              <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
-                <Stethoscope className="h-5 w-5" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl font-bold font-sans">Healthcare Worker Collaboration</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 pt-0 text-sm text-muted-foreground leading-relaxed">
-              Authorized clinical personnel can inspect patient profiles, record vaccine batch numbers, injection sites, and certify administered doses.
-            </CardContent>
-          </Card>
+              {/* Feature 4 */}
+              <SpotlightCard className="border border-border bg-card/90 hover:border-primary/40 transition-colors shadow-2xs rounded-2xl p-6 flex flex-col justify-between" spotlightColor="rgba(21, 194, 217, 0.18)">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold font-sans text-foreground">Trusted Knowledge</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    AI responses are grounded in verified guidelines from the Universal Immunization Programme (UIP) and WHO documentation, preventing misleading hallucinations.
+                  </p>
+                </div>
+              </SpotlightCard>
 
-          {/* Feature 6 */}
-          <Card className="border-border bg-card hover:border-primary/40 transition-colors shadow-2xs">
-            <CardHeader className="p-6 pb-3 space-y-3">
-              <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
-                <FileText className="h-5 w-5" />
-              </div>
-              <CardTitle className="text-lg sm:text-xl font-bold font-sans">Reports &amp; Certificates</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6 pt-0 text-sm text-muted-foreground leading-relaxed">
-              Generate standardized immunization summaries, travel vaccination records, and official certificates ready for school admissions or daycare enrollment.
-            </CardContent>
-          </Card>
+              {/* Feature 5 */}
+              <SpotlightCard className="border border-border bg-card/90 hover:border-primary/40 transition-colors shadow-2xs rounded-2xl p-6 flex flex-col justify-between" spotlightColor="rgba(21, 194, 217, 0.18)">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
+                    <Stethoscope className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold font-sans text-foreground">Healthcare Worker Collaboration</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Authorized clinical personnel can inspect patient profiles, record vaccine batch numbers, injection sites, and certify administered doses.
+                  </p>
+                </div>
+              </SpotlightCard>
 
+              {/* Feature 6 */}
+              <SpotlightCard className="border border-border bg-card/90 hover:border-primary/40 transition-colors shadow-2xs rounded-2xl p-6 flex flex-col justify-between" spotlightColor="rgba(21, 194, 217, 0.18)">
+                <div className="space-y-3">
+                  <div className="p-2.5 rounded-xl bg-primary/10 text-primary w-fit">
+                    <FileText className="h-5 w-5" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold font-sans text-foreground">Reports &amp; Certificates</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Generate standardized immunization summaries, travel vaccination records, and official certificates ready for school admissions or daycare enrollment.
+                  </p>
+                </div>
+              </SpotlightCard>
+
+            </div>
+          </div>
         </div>
       </section>
 
@@ -649,7 +712,7 @@ export default function HomePage() {
             {/* Right: Clinical Workflow Cards */}
             <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
               
-              <div className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs">
+              <SpotlightCard className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs" spotlightColor="rgba(21, 194, 217, 0.16)">
                 <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                   <BadgeCheck className="h-5 w-5" />
                 </div>
@@ -657,9 +720,9 @@ export default function HomePage() {
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   Record administered batch numbers, manufacturers, sites, and digitally sign verification entries.
                 </p>
-              </div>
+              </SpotlightCard>
 
-              <div className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs">
+              <SpotlightCard className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs" spotlightColor="rgba(21, 194, 217, 0.16)">
                 <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                   <Search className="h-5 w-5" />
                 </div>
@@ -667,9 +730,9 @@ export default function HomePage() {
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   Quickly retrieve authorized family records to review baseline compliance during clinical sessions.
                 </p>
-              </div>
+              </SpotlightCard>
 
-              <div className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs">
+              <SpotlightCard className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs" spotlightColor="rgba(21, 194, 217, 0.16)">
                 <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                   <Clock className="h-5 w-5" />
                 </div>
@@ -677,9 +740,9 @@ export default function HomePage() {
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   Evaluate minimum dose intervals and delayed administration rules for missed childhood vaccines.
                 </p>
-              </div>
+              </SpotlightCard>
 
-              <div className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs">
+              <SpotlightCard className="p-5 rounded-xl border border-border bg-background space-y-2.5 shadow-2xs" spotlightColor="rgba(21, 194, 217, 0.16)">
                 <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                   <FileCheck className="h-5 w-5" />
                 </div>
@@ -687,7 +750,7 @@ export default function HomePage() {
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   Export verified patient vaccination histories and coverage statistics for audits and continuity of care.
                 </p>
-              </div>
+              </SpotlightCard>
 
             </div>
 
@@ -837,8 +900,8 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card className="border-border bg-card shadow-2xs">
-            <CardContent className="p-6 space-y-3">
+          <SpotlightCard className="border border-border bg-card shadow-2xs rounded-2xl p-6" spotlightColor="rgba(21, 194, 217, 0.16)">
+            <div className="space-y-3">
               <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                 <FileText className="h-5 w-5" />
               </div>
@@ -846,11 +909,11 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Rules calibrated against the Universal Immunization Programme (UIP) and official pediatric schedules.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </SpotlightCard>
 
-          <Card className="border-border bg-card shadow-2xs">
-            <CardContent className="p-6 space-y-3">
+          <SpotlightCard className="border border-border bg-card shadow-2xs rounded-2xl p-6" spotlightColor="rgba(21, 194, 217, 0.16)">
+            <div className="space-y-3">
               <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                 <Database className="h-5 w-5" />
               </div>
@@ -858,11 +921,11 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Indexed documentation organized by dose sequence, target disease, route, site, and contraindications.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </SpotlightCard>
 
-          <Card className="border-border bg-card shadow-2xs">
-            <CardContent className="p-6 space-y-3">
+          <SpotlightCard className="border border-border bg-card shadow-2xs rounded-2xl p-6" spotlightColor="rgba(21, 194, 217, 0.16)">
+            <div className="space-y-3">
               <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                 <Layers className="h-5 w-5" />
               </div>
@@ -870,11 +933,11 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Every AI response references the specific manual, chapter, or guideline chunk it retrieved.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </SpotlightCard>
 
-          <Card className="border-border bg-card shadow-2xs">
-            <CardContent className="p-6 space-y-3">
+          <SpotlightCard className="border border-border bg-card shadow-2xs rounded-2xl p-6" spotlightColor="rgba(21, 194, 217, 0.16)">
+            <div className="space-y-3">
               <div className="p-2.5 rounded-lg bg-primary/10 text-primary w-fit">
                 <ShieldCheck className="h-5 w-5" />
               </div>
@@ -882,8 +945,8 @@ export default function HomePage() {
               <p className="text-sm text-muted-foreground leading-relaxed">
                 Due dates and interval warnings are calculated via rigorous code algorithms, never estimated by LLMs.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </SpotlightCard>
         </div>
       </section>
 
@@ -908,26 +971,26 @@ export default function HomePage() {
             </div>
 
             <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-5 rounded-xl border border-border bg-card space-y-2 shadow-2xs">
+              <SpotlightCard className="p-5 rounded-xl border border-border bg-card space-y-2 shadow-2xs" spotlightColor="rgba(21, 194, 217, 0.16)">
                 <div className="font-bold text-sm sm:text-base text-foreground font-sans">Role Isolation</div>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   Strict boundaries ensure patients, clinical staff, and administrators only access permitted views.
                 </p>
-              </div>
+              </SpotlightCard>
 
-              <div className="p-5 rounded-xl border border-border bg-card space-y-2 shadow-2xs">
+              <SpotlightCard className="p-5 rounded-xl border border-border bg-card space-y-2 shadow-2xs" spotlightColor="rgba(21, 194, 217, 0.16)">
                 <div className="font-bold text-sm sm:text-base text-foreground font-sans">Explicit Authorization</div>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   Healthcare workers cannot view patient profiles without explicit household authorization.
                 </p>
-              </div>
+              </SpotlightCard>
 
-              <div className="p-5 rounded-xl border border-border bg-card space-y-2 shadow-2xs">
+              <SpotlightCard className="p-5 rounded-xl border border-border bg-card space-y-2 shadow-2xs" spotlightColor="rgba(21, 194, 217, 0.16)">
                 <div className="font-bold text-sm sm:text-base text-foreground font-sans">Encrypted Transport</div>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                   All communications and session tokens are protected with modern cryptographic hashing standards.
                 </p>
-              </div>
+              </SpotlightCard>
             </div>
 
           </div>
@@ -938,27 +1001,49 @@ export default function HomePage() {
       {/* 16. FINAL CTA                                                */}
       {/* ============================================================ */}
       <section className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
-        <div className="rounded-3xl border border-primary/30 bg-linear-to-b from-card via-card to-primary/[0.04] p-8 sm:p-14 lg:p-16 text-center space-y-6 shadow-sm">
-          <div className="space-y-3 max-w-2xl mx-auto">
-            <h2 className="font-itim text-3xl sm:text-4xl lg:text-5xl text-foreground leading-tight">
-              Take control of your family's vaccination journey.
-            </h2>
-            <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
-              Keep records organized, stay on schedule, and access trusted vaccination assistance in one place.
-            </p>
+        <div className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-b from-card via-card to-primary/[0.04] p-8 sm:p-14 lg:p-16 text-center shadow-sm">
+          {/* React Bits SoftAurora ambient visual background */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20 dark:opacity-30 z-0 rounded-3xl">
+            <SoftAurora
+              speed={0.6}
+              scale={1.5}
+              brightness={1}
+              color1="#f7f7f7"
+              color2="#e100ff"
+              noiseFrequency={2.5}
+              noiseAmplitude={1}
+              bandHeight={0.5}
+              bandSpread={1}
+              octaveDecay={0.1}
+              layerOffset={0}
+              colorSpeed={1}
+              enableMouseInteraction
+              mouseInfluence={0.25}
+            />
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
-            <Button asChild size="lg" variant="cyan" className="font-semibold text-base px-8 h-12 shadow-sm">
-              <Link to="/register">Get Started</Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="text-base h-12 font-medium px-6">
-              <Link to="/features">Explore Features</Link>
-            </Button>
-          </div>
+          <div className="relative z-10 space-y-6">
+            <div className="space-y-3 max-w-2xl mx-auto">
+              <h2 className="font-itim text-3xl sm:text-4xl lg:text-5xl text-foreground leading-tight">
+                Take control of your family's vaccination journey.
+              </h2>
+              <p className="text-base sm:text-lg text-muted-foreground leading-relaxed">
+                Keep records organized, stay on schedule, and access trusted vaccination assistance in one place.
+              </p>
+            </div>
 
-          <div className="pt-2 text-xs sm:text-sm text-muted-foreground font-mono">
-            Free for families &bull; Setup in under 60 seconds
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5 pt-2">
+              <Button asChild size="lg" variant="cyan" className="font-semibold text-base px-8 h-12 shadow-sm">
+                <Link to="/register">Get Started</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="text-base h-12 font-medium px-6">
+                <Link to="/features">Explore Features</Link>
+              </Button>
+            </div>
+
+            <div className="pt-2 text-xs sm:text-sm text-muted-foreground font-mono">
+              Free for families &bull; Setup in under 60 seconds
+            </div>
           </div>
         </div>
       </section>

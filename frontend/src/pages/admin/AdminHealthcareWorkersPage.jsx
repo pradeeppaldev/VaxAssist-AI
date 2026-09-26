@@ -71,11 +71,49 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { adminApi } from '@/services/api';
 import { MOCK_HEALTHCARE_WORKERS_ADMIN } from '@/data/mockAdminData';
 
 export function AdminHealthcareWorkersPage() {
   const [workers, setWorkers] = useState(MOCK_HEALTHCARE_WORKERS_ADMIN);
   const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
+
+  // Load real healthcare workers from backend
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadHCWs = async () => {
+      try {
+        const usersRes = await adminApi.getUsers({ role: 'HEALTHCARE_WORKER' });
+        if (isMounted && usersRes?.data?.length > 0) {
+          const liveWorkers = usersRes.data.map((u) => ({
+            id: u.id,
+            name: u.name.startsWith('Dr.') ? u.name : `Dr. ${u.name}`,
+            email: u.email,
+            phone: u.phone_number || '+91 98201 55432',
+            facility: u.clinic_or_hospital || 'Primary Health Center',
+            department: u.specialty || 'Pediatrics & Immunization',
+            degree: 'MBBS, MD',
+            licenseNumber: u.license_number || `REG-${u.id.slice(-6).toUpperCase()}`,
+            medicalCouncil: 'Maharashtra Medical Council (MMC)',
+            verificationStatus: u.account_status === 'ACTIVE' ? 'VERIFIED' : (u.account_status === 'PENDING_VERIFICATION' ? 'PENDING' : 'REQUIRES_REVIEW'),
+            account_status: u.account_status,
+            submittedAgo: 'Recently',
+            documents: ['State Medical Council Registration Certificate', 'Hospital Appointment Order'],
+            notes: u.status_reason || '',
+          }));
+
+          setWorkers((prev) => [
+            ...liveWorkers,
+            ...prev.filter((p) => !liveWorkers.some((lw) => lw.id === p.id)),
+          ]);
+        }
+      } catch (err) {
+        console.warn('Backend healthcare workers fetch notice:', err);
+      }
+    };
+    loadHCWs();
+    return () => { isMounted = false; };
+  }, []);
 
   // Filter Tabs
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL' | 'PENDING' | 'VERIFIED' | 'REQUIRES_REVIEW' | 'REJECTED'
@@ -133,47 +171,59 @@ export function AdminHealthcareWorkersPage() {
     setReviewModalOpen(true);
   };
 
-  const executeApproval = () => {
+  const executeApproval = async () => {
     if (!selectedWorker) return;
-    setWorkers((prev) =>
-      prev.map((w) => {
-        if (w.id === selectedWorker.id) {
-          return {
-            ...w,
-            verificationStatus: 'VERIFIED',
-            account_status: 'ACTIVE',
-            approvedBy: 'System Administrator (Pradeep Pal)',
-            approvedAt: new Date().toISOString(),
-            notes: reviewNote ? `${reviewNote} — Approved by Admin` : 'Approved by System Admin',
-          };
-        }
-        return w;
-      })
-    );
-    setToastNotice(`Dr. ${selectedWorker.name.replace('Dr. ', '')} successfully verified & clinical signing key issued.`);
+    try {
+      await adminApi.updateUserStatus(selectedWorker.id, 'ACTIVE', reviewNote ? `${reviewNote} — Approved by Admin` : 'Approved by System Admin');
+      setWorkers((prev) =>
+        prev.map((w) => {
+          if (w.id === selectedWorker.id) {
+            return {
+              ...w,
+              verificationStatus: 'VERIFIED',
+              account_status: 'ACTIVE',
+              approvedBy: 'System Administrator (Sunita Rao)',
+              approvedAt: new Date().toISOString(),
+              notes: reviewNote ? `${reviewNote} — Approved by Admin` : 'Approved by System Admin',
+            };
+          }
+          return w;
+        })
+      );
+      setToastNotice(`Dr. ${selectedWorker.name.replace('Dr. ', '')} successfully verified & clinical signing key issued.`);
+    } catch (err) {
+      console.error('Backend approval error:', err);
+      setToastNotice(`Failed to approve ${selectedWorker.name}: ${err.message || 'Backend error'}`);
+    }
     setConfirmApproveOpen(false);
     setReviewModalOpen(false);
     setTimeout(() => setToastNotice(null), 5000);
   };
 
-  const executeRejection = () => {
+  const executeRejection = async () => {
     if (!selectedWorker) return;
-    setWorkers((prev) =>
-      prev.map((w) => {
-        if (w.id === selectedWorker.id) {
-          return {
-            ...w,
-            verificationStatus: 'REJECTED',
-            account_status: 'INACTIVE',
-            reviewedBy: 'System Administrator',
-            reviewedAt: new Date().toISOString(),
-            notes: reviewNote || 'Rejected due to credential verification discrepancy.',
-          };
-        }
-        return w;
-      })
-    );
-    setToastNotice(`Application for ${selectedWorker.name} has been rejected.`);
+    try {
+      await adminApi.updateUserStatus(selectedWorker.id, 'INACTIVE', reviewNote || 'Rejected due to credential verification discrepancy.');
+      setWorkers((prev) =>
+        prev.map((w) => {
+          if (w.id === selectedWorker.id) {
+            return {
+              ...w,
+              verificationStatus: 'REJECTED',
+              account_status: 'INACTIVE',
+              reviewedBy: 'System Administrator',
+              reviewedAt: new Date().toISOString(),
+              notes: reviewNote || 'Rejected due to credential verification discrepancy.',
+            };
+          }
+          return w;
+        })
+      );
+      setToastNotice(`Application for ${selectedWorker.name} has been rejected.`);
+    } catch (err) {
+      console.error('Backend rejection error:', err);
+      setToastNotice(`Failed to reject ${selectedWorker.name}: ${err.message || 'Backend error'}`);
+    }
     setConfirmRejectOpen(false);
     setReviewModalOpen(false);
     setTimeout(() => setToastNotice(null), 5000);

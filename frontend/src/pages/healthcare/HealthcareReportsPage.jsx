@@ -35,6 +35,7 @@ import {
 
 // Mock Data
 import { MOCK_CLINICAL_REPORTS_LIST, MOCK_HEALTHCARE_WORKER } from '@/data/mockHealthcareData';
+import { agentApi } from '@/services/api';
 
 export default function HealthcareReportsPage() {
   // Testing state switcher
@@ -44,12 +45,20 @@ export default function HealthcareReportsPage() {
   const [selectedReportPreview, setSelectedReportPreview] = useState(null);
   const [downloadToast, setDownloadToast] = useState(null);
 
-  const triggerDownloadSimulation = (title) => {
-    setDownloadToast(`Preparing clinical audit export for "${title}"...`);
-    setTimeout(() => {
-      setDownloadToast(`Downloaded "${title}" (Clinical PDF)`);
-      setTimeout(() => setDownloadToast(null), 3000);
-    }, 900);
+  const handleDownloadClinicalReport = async (report) => {
+    const title = typeof report === 'string' ? report : (report?.title || 'Clinical Audit Report');
+    try {
+      setDownloadToast(`Generating official PDF for "${title}"...`);
+      await agentApi.downloadReportPdf({
+        report_type: 'clinician_brief',
+      });
+      setDownloadToast(`Downloaded verified "${title}" (Signed PDF)`);
+      setTimeout(() => setDownloadToast(null), 3500);
+    } catch (err) {
+      console.error('Download error:', err);
+      setDownloadToast('PDF generation failed. Please try again.');
+      setTimeout(() => setDownloadToast(null), 4000);
+    }
   };
 
   // ==========================================
@@ -240,7 +249,7 @@ export default function HealthcareReportsPage() {
                 <Button
                   size="sm"
                   className="text-xs h-8 gap-1.5"
-                  onClick={() => triggerDownloadSimulation(rpt.title)}
+                  onClick={() => handleDownloadClinicalReport(rpt)}
                 >
                   <Download className="h-3.5 w-3.5" />
                   <span>Download</span>
@@ -313,7 +322,7 @@ export default function HealthcareReportsPage() {
                   size="sm"
                   className="gap-1.5"
                   onClick={() => {
-                    triggerDownloadSimulation(selectedReportPreview.title);
+                    handleDownloadClinicalReport(selectedReportPreview);
                     setSelectedReportPreview(null);
                   }}
                 >

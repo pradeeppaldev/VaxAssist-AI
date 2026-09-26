@@ -23,6 +23,25 @@ from app.schemas.vaccination import (
     MemberScheduleSummary,
     MemberScheduleResponse,
 )
+from app.schemas.notification import (
+    NotificationResponse,
+    NotificationUnreadCountResponse,
+    NotificationPreferenceResponse,
+    NotificationPreferenceUpdateRequest,
+    MonitoringRunRequest,
+    MonitoringRunResponse,
+)
+from app.schemas.knowledge import (
+    KnowledgeDocumentResponse,
+    KnowledgeDocumentUpdateRequest,
+    KnowledgeDocumentStatusResponse,
+    KnowledgeDocumentListResponse,
+    RAGSourceItem,
+    RAGRetrievedChunk,
+    RAGQueryRequest,
+    RAGQueryResponse,
+    KnowledgeBaseMetricsResponse,
+)
 
 __all__ = [
     "APIResponse",
@@ -45,4 +64,19 @@ __all__ = [
     "ScheduledDoseResponse",
     "MemberScheduleSummary",
     "MemberScheduleResponse",
+    "NotificationResponse",
+    "NotificationUnreadCountResponse",
+    "NotificationPreferenceResponse",
+    "NotificationPreferenceUpdateRequest",
+    "MonitoringRunRequest",
+    "MonitoringRunResponse",
+    "KnowledgeDocumentResponse",
+    "KnowledgeDocumentUpdateRequest",
+    "KnowledgeDocumentStatusResponse",
+    "KnowledgeDocumentListResponse",
+    "RAGSourceItem",
+    "RAGRetrievedChunk",
+    "RAGQueryRequest",
+    "RAGQueryResponse",
+    "KnowledgeBaseMetricsResponse",
 ]

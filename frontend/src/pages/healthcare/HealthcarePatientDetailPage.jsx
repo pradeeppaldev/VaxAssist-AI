@@ -60,7 +60,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-// Mock Data
+import { vaccinationApi } from '@/services/api';
 import { MOCK_PATIENTS_REGISTRY, MOCK_HEALTHCARE_WORKER } from '@/data/mockHealthcareData';
 
 export default function HealthcarePatientDetailPage() {
@@ -89,11 +89,12 @@ export default function HealthcarePatientDetailPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordSuccess, setRecordSuccess] = useState(false);
+  const [recordError, setRecordError] = useState(null);
 
   // Find Patient Data
   const patient = useMemo(() => {
     const found = MOCK_PATIENTS_REGISTRY.find((p) => p.id === id);
-    return found || MOCK_PATIENTS_REGISTRY[0]; // Fallback to Aarav Pal
+    return found || MOCK_PATIENTS_REGISTRY[0]; // Fallback to Aarav Sharma
   }, [id]);
 
   const showToast = (msg) => {
@@ -102,13 +103,33 @@ export default function HealthcarePatientDetailPage() {
   };
 
   // Handle Record Submission
-  const handleRecordSubmit = (e) => {
+  const handleRecordSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setRecordError(null);
+    try {
+      const code = (recordForm.vaccine.split(' ')[0] || 'MR').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      const doseMatch = recordForm.doseNumber.match(/\d+/);
+      const doseNum = doseMatch ? parseInt(doseMatch[0], 10) : 1;
+
+      await vaccinationApi.addRecord(patient.id, {
+        vaccine_code: code || 'VAX',
+        vaccine_name: recordForm.vaccine,
+        dose_number: doseNum,
+        dose_name: recordForm.doseNumber,
+        administered_date: recordForm.adminDate,
+        healthcare_provider: 'Lilavati Hospital & Research Centre',
+        batch_number: recordForm.batchNumber,
+        notes: recordForm.notes,
+      });
       setRecordSuccess(true);
-    }, 1000);
+      showToast(`Recorded ${recordForm.vaccine} (${recordForm.doseNumber}) successfully.`);
+    } catch (err) {
+      console.error('Record submission error:', err);
+      setRecordError(err.message || 'Failed to submit vaccination record to backend.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ==========================================
@@ -532,7 +553,7 @@ export default function HealthcarePatientDetailPage() {
                         <span className="text-[10px] text-muted-foreground font-mono">Yesterday, 04:15 PM</span>
                       </div>
                       <p className="text-xs text-muted-foreground leading-relaxed">
-                        Digital copy of private clinic receipt (Batch MR-7782A-IND) submitted by Meera Pal for school validation.
+                        Digital copy of private clinic receipt (Batch MR-7782A-IND) submitted by Pooja Sharma for school validation.
                       </p>
                     </div>
 
@@ -609,6 +630,13 @@ export default function HealthcarePatientDetailPage() {
                   Certify an administered vaccine dose into {patient.name}'s official clinical ledger.
                 </DialogDescription>
               </DialogHeader>
+
+              {recordError && (
+                <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{recordError}</span>
+                </div>
+              )}
 
               <div className="space-y-3 py-1 text-xs">
                 <div className="space-y-1">

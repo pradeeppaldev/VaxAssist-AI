@@ -1,25 +1,77 @@
-# VaxAssist AI — Digital Vaccination Tracking, Reminder and AI Assistance System
+# VaxAssist AI — Digital Vaccination Tracking, Clinical Reminder & Multi-Agent AI Assistance System
 
-VaxAssist AI is a full-stack, role-based digital vaccination tracking and care coordination platform designed for families, healthcare professionals, and system administrators. It combines deterministic schedule calculation with a multi-agent AI system and trusted RAG knowledge retrieval.
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)](https://github.com/pradeeppaldev/VaxAssist-AI)
+[![Python Version](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://python.org)
+[![React Version](https://img.shields.io/badge/React-18-blue.svg)](https://react.dev)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-teal.svg)](https://fastapi.tiangolo.com)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+VaxAssist AI is an intelligent, full-stack, role-based digital immunization tracking, reminder, and clinical guidance platform designed to support families, healthcare professionals, and public health administrators. The system aligns with India's **Universal Immunization Programme (UIP)** guidelines, combining a deterministic clinical schedule engine, offline-first progressive web app capabilities, and a 5-agent generative AI architecture powered by Google Gemini and ChromaDB vector search.
 
 ---
 
-## 📌 Development Status
+## 🚀 Key Highlights & Architecture
 
-- **Phase 1: Project Foundation** — Completed ✅
-- **Phase 2: Authentication & Role System** — Completed ✅
-  - **JWT Authentication & Role-Based Access Control (RBAC)** across 3 roles: `PATIENT`, `HEALTHCARE_WORKER`, `ADMIN`.
-  - **Lifecycle Account Statuses**: `ACTIVE`, `PENDING`, `REJECTED`, `INACTIVE`.
-  - **Safe System Administrator Bootstrap** mechanism seeding initial admin from config.
-  - **Protected Frontend Routing & AuthContext** restoring sessions and guarding dashboards.
-- **Phase 3: Family & Patient Management** — Completed ✅
-  - **Family Household Entity** with owner isolation and dynamic member counters.
-  - **FamilyMember Entity** with birth date validation (rejecting future dates), gender, relationship, blood group, allergies, and notes.
-  - **Strict Tenancy Isolation & IDOR Protection**: Zero cross-user data leakage (Patient B cannot access, update, or delete Patient A's records).
-  - **Duplicate Member Guard**: Prevents adding duplicate members with identical name and birth date within the same household.
-  - **Dynamic Age Calculation**: Real-time age formatting (days, months, years) without storing static values.
-  - **Production-Grade Patient Dashboard**: Interactive member cards, Add/Edit modals, delete confirmation, and empty/loading states.
-  - **11-step Automated Integration Test Suite** validating all CRUD, edge-case, and tenancy constraints against live MongoDB Atlas.
+```
+                                  ┌───────────────────────────────┐
+                                  │      React 18 + Vite PWA      │
+                                  │ (Offline Cache & Sync Queue)  │
+                                  └──────────────┬────────────────┘
+                                                 │ HTTPS / REST
+                                                 ▼
+                                  ┌───────────────────────────────┐
+                                  │      FastAPI Backend API      │
+                                  │   (JWT Auth, RBAC, Tenancy)   │
+                                  └──────────────┬────────────────┘
+                                                 │
+         ┌───────────────────────────────────────┼────────────────────────────────────────┐
+         ▼                                       ▼                                        ▼
+┌─────────────────────────┐           ┌───────────────────────┐            ┌─────────────────────────┐
+│   MongoDB Atlas Cloud   │           │ ChromaDB Vector Store │            │    Multi-Agent Engine   │
+│ (Users, Families, Doses)│           │ (UIP Chunks & Embeds) │            │ (5 Specialized Agents)  │
+└─────────────────────────┘           └──────────┬────────────┘            └────────────┬────────────┘
+                                                 │                                      │
+                                                 └───────────────┬──────────────────────┘
+                                                                 │
+                                                                 ▼
+                                                  ┌─────────────────────────────┐
+                                                  │   Google Gemini 2.0 / Flash  │
+                                                  │ (Grounded Clinical Insights)│
+                                                  └─────────────────────────────┘
+```
+
+1. **Deterministic UIP Clinical Schedule Engine:**
+   - Evaluates mandatory UIP milestone vaccines from birth to 16 years.
+   - Strictly enforces clinical cutoffs: Hepatitis B birth dose within 24 hours, OPV Zero within 15 days, Rotavirus 1-year cutoff, and Pentavalent catch-up rules.
+   - Prevents medical chronology violations (e.g. dose $N$ cannot precede dose $N-1$).
+2. **Multi-Agent Orchestration System:**
+   - **Monitoring Agent:** Proactively identifies overdue, due-soon, and missed immunization milestones.
+   - **Reminder Agent:** Automates multi-channel notifications (In-App, Email, SMS via Brevo).
+   - **Knowledge Agent (RAG):** Contextual semantic inquiry grounded strictly in MoHFW and WHO official guidelines using ChromaDB vector store.
+   - **Recommendation Agent:** Generates catch-up immunization pathways while clearly separating free UIP vaccines from optional private vaccines.
+   - **Report Agent:** Synthesizes verified clinical records and exports tamper-evident JSON records with SHA-256 seals and downloadable vector PDF certificates.
+   - **Multi-Agent Orchestrator:** Coordinated lifecycle manager executing multi-agent pipelines for patient enrollment, post-vaccination follow-ups, and clinical audits.
+3. **Role-Based Access Control (RBAC) & IDOR Protection:**
+   - **Patient / Household:** Manage family profiles, record personal immunization milestones, view schedules, receive reminders, and export records.
+   - **Healthcare Worker:** Access patient schedules across households, log clinically-verified vaccine administrations, and perform immunization reviews.
+   - **System Administrator:** Manage user accounts, verify clinician credentials, inspect platform telemetry, and upload/re-index knowledge base guidelines.
+4. **Offline Resilience & PWA Support:**
+   - User-scoped offline caching in `localStorage` and `IndexedDB`.
+   - Mutation queueing for offline member creations and dose submissions with duplicate detection upon online reconnection.
+
+---
+
+## 🛠️ Technology Stack
+
+| Layer | Technology | Purpose |
+| :--- | :--- | :--- |
+| **Frontend** | React 18, Vite, Tailwind CSS, shadcn/ui, Lucide Icons | Responsive user interface, interactive dashboards, accessible components |
+| **Backend** | Python 3.13, FastAPI, Pydantic v2, Motor (AsyncIO) | High-performance asynchronous REST API, request validation, business logic |
+| **Database** | MongoDB Atlas (Motor driver) | Multi-tenant persistent document storage (Users, Families, Records, Notifications) |
+| **Vector DB** | ChromaDB (Local persistent) | Vector storage and cosine similarity retrieval for clinical guidelines |
+| **AI / LLM** | Google Gemini (`gemini-flash-latest`, `gemini-embedding-2`) | Evidence-based clinical inquiry, personalized recommendations, automated summaries |
+| **Notifications** | Brevo (Sendinblue) API | Transactional notification delivery (Email & SMS) |
+| **PDF Generation** | ReportLab | Cryptographically sealed clinical certificates and immunization history exports |
 
 ---
 
@@ -29,186 +81,133 @@ VaxAssist AI is a full-stack, role-based digital vaccination tracking and care c
 VaxAssist AI/
 ├── backend/
 │   ├── app/
-│   │   ├── api/
-│   │   │   └── v1/
-│   │   │       ├── endpoints/
-│   │   │       │   └── health.py          # GET /api/v1/health with DB ping
-│   │   │       └── api.py                 # Router aggregation
-│   │   ├── database/
-│   │   │   └── mongodb.py                 # Async Motor connection manager & ping
-│   │   ├── models/                        # Extensible Pydantic & Mongo schemas
-│   │   │   ├── base.py                    # MongoBaseModel with timestamps & ObjectId
-│   │   │   ├── user.py                    # User, UserRole, UserStatus
-│   │   │   ├── family.py                  # Family, FamilyMember, Gender
-│   │   │   ├── vaccination.py             # VaccinationRecord, VaccinationSchedule
-│   │   │   ├── notification.py            # Notification, Channel, Type, Status
-│   │   │   ├── knowledge.py               # KnowledgeDocument (for RAG)
-│   │   │   ├── report.py                  # Report, ReportType
-│   │   │   └── audit.py                   # AuditLog
-│   │   ├── schemas/
-│   │   │   └── common.py                  # HealthCheckResponse, APIResponse
-│   │   ├── services/                      # Business logic (for future phases)
-│   │   ├── utils/                         # Helper utilities
-│   │   ├── config.py                      # Pydantic BaseSettings configuration
-│   │   └── main.py                        # FastAPI app, CORS, lifespan handlers
-│   ├── .env.example                       # Backend environment template
-│   ├── .env                               # Local environment configuration
-│   ├── requirements.txt                   # Backend Python dependencies
-│   └── run.py                             # Development server runner
+│   │   ├── agents/                   # Multi-agent architecture & Orchestrator
+│   │   │   ├── monitoring/           # Proactive Milestone Monitoring Agent
+│   │   │   ├── reminder/             # Multi-Channel Reminder Agent
+│   │   │   ├── knowledge/            # Knowledge Base RAG Agent
+│   │   │   ├── recommendation/       # Catch-up & Clinical Recommendation Agent
+│   │   │   ├── report/               # Cryptographic Report & PDF Agent
+│   │   │   └── orchestrator/         # Multi-Agent Workflow Coordinator
+│   │   ├── api/                      # FastAPI REST Routes & Dependency Injection
+│   │   │   ├── deps.py               # Current user, active user, role dependencies
+│   │   │   └── v1/                   # API Version 1 endpoints (auth, families, vax, etc.)
+│   │   ├── database/                 # Async MongoDB Motor connection manager
+│   │   ├── models/                   # Domain entities and Mongo document models
+│   │   ├── schemas/                  # Pydantic validation request/response schemas
+│   │   ├── services/                 # Core domain services (Schedule engine, RAG, etc.)
+│   │   ├── config.py                 # Pydantic BaseSettings environment config
+│   │   └── main.py                   # FastAPI application initialization & lifespan
+│   ├── data/
+│   │   ├── chroma/                   # ChromaDB persistent vector database directory
+│   │   └── knowledge/                # Raw uploaded guideline documents
+│   ├── .env.example                  # Template environment file
+│   └── requirements.txt              # Backend dependencies
 ├── frontend/
+│   ├── public/                       # Static assets, web manifest, service worker
 │   ├── src/
-│   │   ├── components/
-│   │   │   └── common/
-│   │   │       ├── Navbar.jsx             # Top bar with live backend status indicator
-│   │   │       └── Footer.jsx
-│   │   ├── hooks/
-│   │   │   └── useHealthCheck.js          # Reactive health hook with latency tracking
-│   │   ├── layouts/
-│   │   │   └── MainLayout.jsx             # App layout shell
-│   │   ├── lib/
-│   │   │   └── utils.js                   # Class merging utility (clsx + twMerge)
-│   │   ├── pages/
-│   │   │   ├── HomePage.jsx               # System overview, 3 roles & 5 agents
-│   │   │   ├── SystemTestPage.jsx         # Live frontend ↔ backend diagnostics
-│   │   │   └── NotFoundPage.jsx
-│   │   ├── routes/
-│   │   │   └── AppRoutes.jsx              # Central router configuration
-│   │   ├── services/
-│   │   │   └── api.js                     # API client for health queries
-│   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── index.html
-│   ├── package.json
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   ├── vite.config.js
-│   ├── .env.example
-│   └── .env
-├── .gitignore
-└── README.md
+│   │   ├── components/               # Common, Healthcare, AI, and shadcn UI widgets
+│   │   ├── context/                  # AuthContext (JWT session restoration, RBAC)
+│   │   ├── pages/                    # Role-specific dashboard & workspace views
+│   │   │   ├── dashboards/           # Patient, Healthcare Worker, Admin Dashboards
+│   │   │   ├── patient/              # Family, Schedule, AIAssistant, Reports pages
+│   │   │   ├── healthcare/           # Patient registry, clinical schedules, logging
+│   │   │   └── admin/                # User management, HCW verification, KB pages
+│   │   ├── routes/                   # Protected and role-guarded route definitions
+│   │   └── services/                 # Axios API clients & offlineSync service
+│   ├── package.json                  # Frontend dependencies and Vite scripts
+│   └── vite.config.js                # Vite build and development configuration
+├── ENVIRONMENT_SETUP.md              # Detailed local configuration and env guide
+├── USER_GUIDE.md                     # Comprehensive step-by-step role walkthrough
+├── FINAL_TEST_REPORT.md              # Verification report across all test suites
+└── README.md                         # This file
 ```
 
 ---
 
-## ⚙️ Environment Configuration
+## ⚡ Quickstart & Local Installation
 
-### Backend (`backend/.env`)
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `PROJECT_NAME` | Name of the project | `"VaxAssist AI"` |
-| `API_V1_STR` | Base prefix for v1 endpoints | `"/api/v1"` |
-| `ENVIRONMENT` | Environment name | `"development"` |
-| `DEBUG` | Enable auto-reload & verbose logging | `True` |
-| `HOST` | Backend bind host | `"127.0.0.1"` |
-| `PORT` | Backend port | `8000` |
-| `BACKEND_CORS_ORIGINS` | Allowed frontend origins (JSON list or comma-separated) | `["http://localhost:5173","http://127.0.0.1:5173"]` |
-| `MONGODB_URI` | MongoDB connection URI | `"mongodb://localhost:27017"` |
-| `MONGODB_DB_NAME` | Database name | `"vaxassist_db"` |
-| `JWT_SECRET_KEY` | Secret for Phase 2 JWT signing | (placeholder) |
-| `LLM_PROVIDER` | AI provider for Phase 7 & 8 | `"gemini"` |
-| `GEMINI_API_KEY` | Google Gemini API Key | `""` |
+### Prerequisites
+- **Python:** 3.11, 3.12, or 3.13
+- **Node.js:** v18.0.0 or higher (v20+ recommended)
+- **MongoDB:** Active MongoDB Atlas URI or local MongoDB instance (port 27017)
+- **Gemini API Key:** Free Google AI Studio API key
 
-### Frontend (`frontend/.env`)
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `VITE_API_BASE_URL` | Base URL of FastAPI v1 endpoints | `"http://localhost:8000/api/v1"` |
-
----
-
-## 🚀 Running the Application
-
-### 1. Prerequisites
-- **Python 3.10+ / 3.11+ / 3.13**
-- **Node.js v18+ or v20+** and `npm`
-- **MongoDB** (Local instance or MongoDB Atlas cluster)
-
----
-
-### 2. Backend Setup & Run
-
-Open a terminal in the project directory:
+### 1. Backend Setup
 
 ```bash
-# Navigate to backend
+# Navigate to backend directory
 cd backend
 
-# Create virtual environment (if not already created)
+# Create and activate Python virtual environment
 python -m venv .venv
-
-# Activate virtual environment
-# Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-# Windows Command Prompt:
-.\.venv\Scripts\activate.bat
-# Linux/macOS:
-source .venv/bin/activate
+# On Windows:
+.\.venv\Scripts\activate
+# On Linux/macOS:
+# source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Start backend server
-python run.py
+# Configure environment variables
+copy .env.example .env
+# Edit .env with your MONGODB_URI and GEMINI_API_KEY
 ```
 
-The FastAPI backend will start at:
-- **API URL**: `http://localhost:8000`
-- **Interactive Swagger Docs**: `http://localhost:8000/docs`
-- **Health Check Endpoint**: `http://localhost:8000/api/v1/health`
-
----
-
-### 3. Frontend Setup & Run
-
-Open a second terminal:
+### 2. Frontend Setup
 
 ```bash
-# Navigate to frontend
+# In a separate terminal, navigate to frontend directory
 cd frontend
 
-# Install npm dependencies
+# Install npm packages
 npm install
 
 # Start development server
 npm run dev
 ```
 
-The React frontend will be available at:
-- `http://localhost:5173`
+The frontend will be accessible at `http://localhost:5173`, and the FastAPI backend documentation will be accessible at `http://localhost:8000/docs`.
 
 ---
 
-## 🧪 Verifying the Foundation
+## 🧪 Testing & Verification
 
-1. Open `http://localhost:5173` in your browser.
-2. Verify the live status indicator in the top navbar says **Backend: Online**.
-3. Navigate to **System Test** (`http://localhost:5173/system-test`).
-4. Click **Retest Connection** to test real-time latency and view the raw JSON payload returned by the FastAPI server.
-5. Visit `http://localhost:8000/docs` to view the auto-generated Swagger OpenAPI schema.
+The system includes automated test suites covering all architectural layers:
+
+```bash
+# Run Phase G Final Integration Suite (Patient, HCW, Admin E2E journeys)
+python -m unittest backend/test_phase_g_final_integration.py
+
+# Run Phase F Security & Clinical Validation Suite
+python -m unittest backend/test_phase_f_security_clinical.py
+
+# Run Phase E Dashboard, UX & Reports Suite
+python -m unittest backend/test_phase_e_dashboard_reports.py
+
+# Run Phase D Multi-Agent & Orchestrator Suite
+python -m unittest backend/test_phase_d_agent_orchestrator.py
+
+# Run Phase B Offline Support & Synchronization Suite
+python -m unittest backend/test_phase_b_offline_sync.py
+
+# Build frontend production bundle
+npm --prefix frontend run build
+```
 
 ---
 
-## 🗄️ MongoDB Configuration Guidance
+## 👥 Demo Credentials
 
-If the health check reports `database.status: "disconnected"`:
-- **Local MongoDB**: Ensure MongoDB service is started via Windows Services or run `mongod` in a terminal.
-- **MongoDB Atlas (Cloud)**:
-  1. Create a free cluster on [cloud.mongodb.com](https://cloud.mongodb.com).
-  2. Obtain your connection string: `mongodb+srv://<username>:<password>@cluster0.example.mongodb.net/?retryWrites=true&w=majority`.
-  3. Update `backend/.env` with `MONGODB_URI="your-atlas-uri"`.
-  4. Restart or re-test the backend.
+For testing and demonstration, use the following pre-seeded demo accounts:
+
+| Role | Email | Password | Primary Purpose |
+| :--- | :--- | :--- | :--- |
+| **System Admin** | `admin@vaxassist.demo` | `Admin@Vax2026!` | Telemetry, user moderation, KB document management |
+| **Healthcare Worker** | `dr.anjali.deshmukh@vaxassist.demo` | `DrAnjali@Vax2026!` | Cross-household clinical schedule review, dose logging |
+| **Patient (Household)**| `rajesh.sharma@vaxassist.demo` | `Rajesh@Vax2026!` | Family management, schedule viewing, AI assistant |
 
 ---
 
-## 🗺️ Development Roadmap
+## 📄 License & Attribution
 
-- **Phase 1: Project Foundation** *(Current - Completed)*
-- **Phase 2**: Authentication & Role Authorization (JWT, RBAC for 3 roles)
-- **Phase 3**: Family & Patient Management
-- **Phase 4**: Vaccination Records & Deterministic Schedule Engine
-- **Phase 5**: Role-Specific Dashboards (Family, Healthcare Worker, Admin)
-- **Phase 6**: Proactive Monitoring & Notification Engine
-- **Phase 7**: Knowledge Base, Vector Store (ChromaDB) & RAG
-- **Phase 8**: 5 Specialized AI Agents
-- **Phase 9**: Multi-Agent Orchestration & Real Workflows
-- **Phase 10**: Reports, Certificates, Offline Support & Deployment
+This project is developed for educational and academic demonstration purposes as a digital health tracking system under the Universal Immunization Programme (UIP) India framework.

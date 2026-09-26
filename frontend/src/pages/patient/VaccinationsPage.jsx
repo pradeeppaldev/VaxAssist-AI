@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { familyApi, vaccinationApi, agentApi } from '@/services/api';
 import {
   Syringe,
   Plus,
@@ -123,6 +124,7 @@ export default function VaccinationsPage() {
 
   // State
   const [records, setRecords] = useState(INITIAL_VACCINATION_RECORDS);
+  const [familyMembers, setFamilyMembers] = useState(INITIAL_FAMILY_MEMBERS);
   const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
   const [displayMode, setDisplayMode] = useState('table'); // 'table' | 'timeline'
 
@@ -142,16 +144,85 @@ export default function VaccinationsPage() {
   // Notification Toast
   const [toastMessage, setToastMessage] = useState(null);
 
+  // Load family members & backend records
+  useEffect(() => {
+    let isMounted = true;
+    const fetchBackendData = async () => {
+      try {
+        const famRes = await familyApi.getMembers();
+        if (isMounted && famRes?.data?.length > 0) {
+          const membersList = famRes.data.map((m) => ({
+            id: m.id,
+            name: m.full_name,
+            relationship: m.relationship,
+            age: m.date_of_birth ? `${Math.max(0, new Date().getFullYear() - new Date(m.date_of_birth).getFullYear())}y` : 'Family',
+          }));
+          setFamilyMembers(membersList);
+
+          // Load records for all family members
+          try {
+            const allRecResults = await Promise.allSettled(
+              membersList.map((m) => vaccinationApi.getMemberRecords(m.id))
+            );
+            const allFetchedRecords = [];
+            allRecResults.forEach((res, idx) => {
+              const currentMember = membersList[idx];
+              if (res.status === 'fulfilled' && res.value?.data?.length > 0) {
+                res.value.data.forEach((r) => {
+                  const dateObj = new Date(r.administered_date || Date.now());
+                  allFetchedRecords.push({
+                    id: r.id,
+                    vaccineName: r.vaccine_name,
+                    disease: r.vaccine_code || 'Immunization',
+                    dose: r.dose_name || `Dose ${r.dose_number}`,
+                    category: 'UIP Routine',
+                    memberId: r.family_member_id || currentMember.id,
+                    memberName: currentMember.name,
+                    memberRelation: currentMember.relationship,
+                    date: r.administered_date,
+                    formattedDate: isNaN(dateObj.getTime()) ? 'Verified' : dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                    year: isNaN(dateObj.getTime()) ? 2026 : dateObj.getFullYear(),
+                    month: isNaN(dateObj.getTime()) ? 'Recent' : dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                    status: 'COMPLETED',
+                    provider: r.healthcare_provider || 'Dr. Anjali Deshmukh',
+                    clinic: r.healthcare_provider || 'Lilavati Hospital & Research Centre, Mumbai',
+                    batchNumber: r.batch_number || 'BATCH-STD',
+                    site: 'Upper Arm / Deltoid',
+                    hasCertificate: true,
+                    certificateId: `CERT-${r.id ? r.id.slice(-6).toUpperCase() : 'VALID'}`,
+                    notes: r.notes || 'Officially verified dose record.',
+                    isOfflinePending: !!r.isOfflinePending,
+                  });
+                });
+              }
+            });
+            if (isMounted && allFetchedRecords.length > 0) {
+              setRecords(allFetchedRecords);
+            }
+          } catch (rErr) {
+            // keep initial records
+          }
+        }
+      } catch (err) {
+        // keep initial mock records
+      }
+    };
+    fetchBackendData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Form State for Add Record
   const [addForm, setAddForm] = useState({
     memberId: 'fam-1',
-    vaccineName: 'DPT Booster (Dose 1)',
-    dose: 'Booster 1',
+    vaccineName: 'DPT Booster 2 (Age 5-6 Years)',
+    dose: 'Booster 2',
     category: 'UIP Routine',
     date: new Date().toISOString().split('T')[0],
-    provider: 'Dr. Sunita Sharma',
-    clinic: 'City Child Clinic, Sector 14',
-    batchNumber: 'BT-2026-X84',
+    provider: 'Dr. Anjali Deshmukh',
+    clinic: 'Lilavati Hospital & Research Centre, Mumbai',
+    batchNumber: 'DPT-2026-X84',
     site: 'Left Deltoid (Upper Arm)',
     notes: '',
     hasCertificate: true,
@@ -235,7 +306,7 @@ export default function VaccinationsPage() {
     return errors;
   };
 
-  const handleAddSubmit = (e) => {
+  const handleAddSubmit = async (e) => {
     e.preventDefault();
     const errors = validateAddForm();
     if (Object.keys(errors).length > 0) {
@@ -243,7 +314,7 @@ export default function VaccinationsPage() {
       return;
     }
 
-    const memberObj = INITIAL_FAMILY_MEMBERS.find((m) => m.id === addForm.memberId);
+    const memberObj = familyMembers.find((m) => m.id === addForm.memberId) || INITIAL_FAMILY_MEMBERS.find((m) => m.id === addForm.memberId);
     const dateObj = new Date(addForm.date);
     const formattedDate = dateObj.toLocaleDateString('en-US', {
       month: 'short',
@@ -254,6 +325,29 @@ export default function VaccinationsPage() {
     const isFuture = dateObj > new Date();
     const assignedStatus = isFuture ? 'UPCOMING' : 'COMPLETED';
 
+    const doseMatch = addForm.dose.match(/\d+/);
+    const doseNumber = doseMatch ? parseInt(doseMatch[0], 10) : 1;
+    const codeMatch = addForm.vaccineName.match(/\(([^)]+)\)/);
+    const vaccineCode = codeMatch ? codeMatch[1].replace(/[^a-zA-Z0-9]/g, '').slice(0, 10).toUpperCase() : addForm.vaccineName.split(' ')[0].toUpperCase();
+
+    // Call backend API if past/present administered date
+    try {
+      if (!isFuture) {
+        await vaccinationApi.addRecord(addForm.memberId, {
+          vaccine_code: vaccineCode || 'VAX',
+          vaccine_name: addForm.vaccineName.trim(),
+          dose_number: doseNumber,
+          dose_name: addForm.dose.trim(),
+          administered_date: addForm.date,
+          healthcare_provider: addForm.provider.trim() || 'Health Practitioner',
+          batch_number: addForm.batchNumber.trim() || undefined,
+          notes: addForm.notes.trim() || undefined,
+        });
+      }
+    } catch (err) {
+      console.warn('Backend record creation failed, updating local state:', err);
+    }
+
     const newRecord = {
       id: `vax-rec-${Date.now()}`,
       vaccineName: addForm.vaccineName.trim(),
@@ -261,8 +355,8 @@ export default function VaccinationsPage() {
       dose: addForm.dose.trim(),
       category: addForm.category,
       memberId: addForm.memberId,
-      memberName: memberObj ? memberObj.name : 'Family Member',
-      memberRelation: memberObj ? `${memberObj.relationship} (${memberObj.age})` : 'Dependent',
+      memberName: memberObj ? (memberObj.full_name || memberObj.name) : 'Family Member',
+      memberRelation: memberObj ? `${memberObj.relationship || 'Dependent'} (${memberObj.age || 'Child'})` : 'Dependent',
       date: addForm.date,
       formattedDate,
       year: dateObj.getFullYear(),
@@ -275,6 +369,7 @@ export default function VaccinationsPage() {
       hasCertificate: addForm.hasCertificate,
       certificateId: addForm.hasCertificate ? `CERT-${Date.now().toString().slice(-6)}` : null,
       notes: addForm.notes.trim() || 'Recorded via patient digital portal.',
+      isOfflinePending: typeof navigator !== 'undefined' && !navigator.onLine,
     };
 
     setRecords((prev) => [newRecord, ...prev]);
@@ -293,9 +388,37 @@ export default function VaccinationsPage() {
     setIsCertModalOpen(true);
   };
 
-  const handleExportSummary = () => {
-    setToastMessage('Exporting complete family vaccination report (PDF)... Download started.');
-    setTimeout(() => setToastMessage(null), 4000);
+  const handleExportSummary = async () => {
+    try {
+      setToastMessage('Exporting verified immunization record (PDF)...');
+      await agentApi.downloadReportPdf({
+        report_type: 'comprehensive_record',
+        family_member_id: selectedMemberId !== 'ALL' ? selectedMemberId : undefined,
+      });
+      setToastMessage('Verified report downloaded successfully!');
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      setToastMessage('Export failed. Please check network connection.');
+      setTimeout(() => setToastMessage(null), 4000);
+    }
+  };
+
+  const handleDownloadCertificatePdf = async (record) => {
+    if (!record) return;
+    try {
+      setToastMessage(`Downloading official PDF pass for ${record.memberName}...`);
+      await agentApi.downloadReportPdf({
+        report_type: 'immunization_passport',
+        family_member_id: record.memberId,
+      });
+      setToastMessage(`Digital pass for ${record.memberName} downloaded!`);
+      setTimeout(() => setToastMessage(null), 3500);
+    } catch (err) {
+      console.error('Passport download failed:', err);
+      setToastMessage('Pass download failed. Please retry.');
+      setTimeout(() => setToastMessage(null), 4000);
+    }
   };
 
   // ==========================================
@@ -502,7 +625,7 @@ export default function VaccinationsPage() {
                     <strong className="text-primary font-semibold">
                       {selectedMemberId === 'ALL'
                         ? 'All Family Members'
-                        : INITIAL_FAMILY_MEMBERS.find((m) => m.id === selectedMemberId)?.name}
+                        : (familyMembers.find((m) => m.id === selectedMemberId)?.name || INITIAL_FAMILY_MEMBERS.find((m) => m.id === selectedMemberId)?.name)}
                     </strong>
                   </p>
                 </div>
@@ -515,8 +638,8 @@ export default function VaccinationsPage() {
                     <SelectValue placeholder="Select Family Member" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ALL">All Family Members (4 Profiles)</SelectItem>
-                    {INITIAL_FAMILY_MEMBERS.map((member) => (
+                    <SelectItem value="ALL">All Family Members ({familyMembers.length} Profiles)</SelectItem>
+                    {familyMembers.map((member) => (
                       <SelectItem key={member.id} value={member.id}>
                         {member.name} ({member.relationship})
                       </SelectItem>
@@ -1269,8 +1392,7 @@ export default function VaccinationsPage() {
                   className="text-xs font-semibold"
                   onClick={() => {
                     setIsCertModalOpen(false);
-                    setToastMessage(`Downloading official PDF for ${certViewingRecord.memberName}`);
-                    setTimeout(() => setToastMessage(null), 3500);
+                    handleDownloadCertificatePdf(certViewingRecord);
                   }}
                 >
                   <Download className="h-3.5 w-3.5 mr-1" />
@@ -1309,7 +1431,7 @@ export default function VaccinationsPage() {
                   <SelectValue placeholder="Select family member" />
                 </SelectTrigger>
                 <SelectContent>
-                  {INITIAL_FAMILY_MEMBERS.map((m) => (
+                  {familyMembers.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.name} ({m.relationship}, {m.age})
                     </SelectItem>

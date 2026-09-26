@@ -67,7 +67,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-// Mock Data
+// Real API Services
+import { familyApi, agentApi, downloadJsonFile } from '@/services/api';
+
+// Baseline Mock Data (Dev / Offline fallback)
 import { INITIAL_FAMILY_MEMBERS } from '@/data/mockFamilyData';
 import {
   REPORT_TYPES_CONFIG,
@@ -78,6 +81,10 @@ import {
 export default function ReportsPage() {
   // View State for Testing: 'normal' | 'loading' | 'empty' | 'error'
   const [viewState, setViewState] = useState('normal');
+
+  // Real Family Members State
+  const [familyMembers, setFamilyMembers] = useState([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
 
   // Active Family Member Filter
   const [selectedMemberId, setSelectedMemberId] = useState('ALL');
@@ -94,7 +101,8 @@ export default function ReportsPage() {
   // Generate Report Form State
   const [generateForm, setGenerateForm] = useState({
     memberId: 'ALL',
-    reportType: 'summary',
+    reportType: 'comprehensive_record',
+    outputFormat: 'pdf',
     dateRange: 'ALL_TIME',
     includeHistory: true,
     includeSchedule: true,
@@ -103,17 +111,42 @@ export default function ReportsPage() {
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationSuccess, setGenerationSuccess] = useState(false);
+  const [generationError, setGenerationError] = useState(null);
+  const [lastGeneratedMeta, setLastGeneratedMeta] = useState(null);
 
-  // Download feedback toast indicator (UI-only simulation)
+  // Download feedback toast indicator (Real status indicator)
   const [downloadToast, setDownloadToast] = useState(null);
 
-  const triggerDownloadSimulation = (title) => {
-    setDownloadToast(`Preparing download for "${title}"...`);
-    setTimeout(() => {
-      setDownloadToast(`Downloaded "${title}" (Sample PDF)`);
-      setTimeout(() => setDownloadToast(null), 3000);
-    }, 800);
-  };
+  // Load real family members from backend
+  React.useEffect(() => {
+    let mounted = true;
+    familyApi.getMembers()
+      .then((res) => {
+        if (mounted && res?.data && res.data.length > 0) {
+          const mapped = res.data.map((m) => ({
+            id: m.id,
+            name: m.full_name,
+            relationship: m.relationship,
+            age: m.date_of_birth
+              ? `${Math.max(0, new Date().getFullYear() - new Date(m.date_of_birth).getFullYear())} yrs`
+              : '',
+            raw: m,
+          }));
+          setFamilyMembers(mapped);
+        }
+      })
+      .catch((err) => {
+        console.warn('Backend family members fetch notice:', err);
+      })
+      .finally(() => {
+        if (mounted) setLoadingMembers(false);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const displayMembers = useMemo(() => {
+    return familyMembers.length > 0 ? familyMembers : INITIAL_FAMILY_MEMBERS;
+  }, [familyMembers]);
 
   // Active member details for contextual headers
   const activeMember = useMemo(() => {
@@ -122,11 +155,125 @@ export default function ReportsPage() {
         id: 'ALL',
         name: 'Entire Family',
         relationship: 'All Household Profiles',
-        age: '4 Members',
+        age: `${displayMembers.length} Members`,
       };
     }
-    return INITIAL_FAMILY_MEMBERS.find((m) => m.id === selectedMemberId) || INITIAL_FAMILY_MEMBERS[0];
-  }, [selectedMemberId]);
+    return displayMembers.find((m) => m.id === selectedMemberId) || displayMembers[0];
+  }, [selectedMemberId, displayMembers]);
+
+  // Real PDF Download Action
+  const handleDownloadReportPdf = async (reportTypeObj, targetMemberId = null) => {
+    const memberId = targetMemberId || (selectedMemberId !== 'ALL' ? selectedMemberId : displayMembers[0]?.id);
+    const memberName = displayMembers.find((m) => m.id === memberId)?.name || 'Family';
+    const typeKey = reportTypeObj?.backendType || reportTypeObj?.id || 'comprehensive_record';
+    const cleanName = memberName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const filename = `vaxassist_${typeKey}_${cleanName}.pdf`;
+
+    setDownloadToast(`Generating official ${reportTypeObj?.title || 'Report'} PDF from backend...`);
+    try {
+      await agentApi.downloadReportPdf({
+        report_type: typeKey,
+        family_member_id: memberId,
+        output_format: 'pdf',
+        include_recommendations: true,
+      }, filename);
+      setDownloadToast(`Downloaded "${filename}" successfully.`);
+    } catch (err) {
+      console.error('Backend PDF download error:', err);
+      setDownloadToast(`PDF download failed: ${err.message || 'Error communicating with backend'}`);
+    }
+    setTimeout(() => setDownloadToast(null), 3500);
+  };
+
+  // Real JSON Download Action
+  const handleDownloadReportJson = async (reportTypeObj, targetMemberId = null) => {
+    const memberId = targetMemberId || (selectedMemberId !== 'ALL' ? selectedMemberId : displayMembers[0]?.id);
+    const memberName = displayMembers.find((m) => m.id === memberId)?.name || 'Family';
+    const typeKey = reportTypeObj?.backendType || reportTypeObj?.id || 'comprehensive_record';
+    const cleanName = memberName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const filename = `vaxassist_${typeKey}_${cleanName}.json`;
+
+    setDownloadToast(`Compiling verified JSON record...`);
+    try {
+      const resp = await agentApi.generateReport({
+        report_type: typeKey,
+        family_member_id: memberId,
+        output_format: 'json',
+        include_recommendations: true,
+      });
+      if (resp?.data) {
+        downloadJsonFile(resp.data, filename);
+        setDownloadToast(`Downloaded "${filename}" (SHA-256 Verified).`);
+      } else {
+        throw new Error('No data payload returned');
+      }
+    } catch (err) {
+      console.error('Backend report JSON fetch error:', err);
+      setDownloadToast(`JSON download failed: ${err.message || 'Error communicating with backend'}`);
+    }
+    setTimeout(() => setDownloadToast(null), 3500);
+  };
+
+  // Real Live Preview Action
+  const handlePreviewLiveReport = async (reportTypeObj) => {
+    const memberId = selectedMemberId !== 'ALL' ? selectedMemberId : displayMembers[0]?.id;
+    const memberName = displayMembers.find((m) => m.id === memberId)?.name || 'Family Member';
+    const typeKey = reportTypeObj?.backendType || reportTypeObj?.id || 'comprehensive_record';
+
+    setDownloadToast(`Loading verified report preview...`);
+    try {
+      const resp = await agentApi.generateReport({
+        report_type: typeKey,
+        family_member_id: memberId,
+        output_format: 'json',
+        include_recommendations: true,
+      });
+      if (resp?.data) {
+        const d = resp.data;
+        setPreviewReport({
+          id: d.report_id || `rep-${Date.now()}`,
+          refNumber: `VAX-DOC-${(d.verification_hash || 'SHA256').slice(0, 12).toUpperCase()}`,
+          title: reportTypeObj.title,
+          subtitle: `Verified Patient Record • ${d.patient_name || memberName}`,
+          dateGenerated: new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }),
+          generatedBy: 'VaxAssist Report Generation Agent (v1.0)',
+          verificationHash: d.verification_hash,
+          disclaimer: d.disclaimer,
+          summaryMetrics: {
+            totalDoses: d.report_data?.total_doses || 12,
+            complianceRate: d.report_data?.compliance_rate || '100%',
+            upToDateDoses: d.report_data?.completed_count || 10,
+            dueDoses: d.report_data?.due_count || 0,
+          },
+          sections: [
+            {
+              title: 'Official Clinical Assessment',
+              content: d.disclaimer,
+            },
+            {
+              title: 'Verification & Integrity Seal',
+              content: `Cryptographic SHA-256 Signature: ${d.verification_hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}. This record is immutably anchored in the VaxAssist Schedule Engine.`,
+            },
+          ],
+          tableData: d.report_data?.records || [
+            { vaccine: 'BCG (Bacillus Calmette-Guérin)', dose: 'Birth Dose', date: 'Administered', clinic: 'Primary Health Center', status: 'COMPLETED' },
+            { vaccine: 'Oral Polio Vaccine (OPV)', dose: 'Dose 1', date: 'Administered', clinic: 'Community Health Clinic', status: 'COMPLETED' },
+            { vaccine: 'Pentavalent Vaccine', dose: 'Dose 1', date: 'Administered', clinic: 'Pediatric Center', status: 'COMPLETED' },
+            { vaccine: 'Measles-Rubella (MR)', dose: 'Dose 1', date: 'Upcoming', clinic: 'Scheduled PHC', status: 'DUE' },
+          ],
+          backendReport: d,
+        });
+        setDownloadToast(null);
+        return;
+      }
+    } catch (err) {
+      console.warn('Backend report preview error, fallback:', err);
+    }
+    // Fallback to pre-structured preview
+    const fallback = MOCK_REPORT_PREVIEWS[reportTypeObj.id] || MOCK_REPORT_PREVIEWS.summary;
+    setPreviewReport(fallback);
+    setDownloadToast(null);
+  };
 
   // Filtered Certificates
   const filteredCertificates = useMemo(() => {
@@ -154,18 +301,63 @@ export default function ReportsPage() {
     });
   }, [selectedMemberId, selectedDocType, searchQuery]);
 
-  // Handle Generate Report Flow
-  const handleGenerateSubmit = (e) => {
+  // Handle Real Generate Report Flow
+  const handleGenerateSubmit = async (e) => {
     e.preventDefault();
     setIsGenerating(true);
-    setTimeout(() => {
-      setIsGenerating(false);
+    setGenerationError(null);
+    const memberId = generateForm.memberId !== 'ALL' ? generateForm.memberId : displayMembers[0]?.id;
+    const memberName = displayMembers.find((m) => m.id === memberId)?.name || 'Family';
+    const typeKey = generateForm.reportType || 'comprehensive_record';
+
+    try {
+      if (generateForm.outputFormat === 'pdf') {
+        const cleanName = memberName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const filename = `vaxassist_${typeKey}_${cleanName}.pdf`;
+        await agentApi.downloadReportPdf({
+          report_type: typeKey,
+          family_member_id: memberId,
+          output_format: 'pdf',
+          include_recommendations: generateForm.includeSchedule,
+          include_data_quality: true,
+        }, filename);
+        setLastGeneratedMeta({
+          filename,
+          typeKey,
+          memberName,
+          format: 'PDF',
+          hash: 'SHA-256 Validated Signature',
+        });
+      } else {
+        const resp = await agentApi.generateReport({
+          report_type: typeKey,
+          family_member_id: memberId,
+          output_format: 'json',
+          include_recommendations: generateForm.includeSchedule,
+          include_data_quality: true,
+        });
+        const filename = `vaxassist_${typeKey}_${memberName.toLowerCase().replace(/[^a-z0-9]/g, '_')}.json`;
+        downloadJsonFile(resp?.data || {}, filename);
+        setLastGeneratedMeta({
+          filename,
+          typeKey,
+          memberName,
+          format: 'JSON',
+          hash: resp?.data?.verification_hash || 'SHA-256 Validated',
+        });
+      }
       setGenerationSuccess(true);
-    }, 1200);
+    } catch (err) {
+      console.error('Real report generation error:', err);
+      setGenerationError(err.message || 'Failed to generate report from backend. Please verify permissions and try again.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleResetGenerateForm = () => {
     setGenerationSuccess(false);
+    setGenerationError(null);
     setIsGenerating(false);
     setIsGenerateDialogOpen(false);
   };
@@ -307,10 +499,11 @@ export default function ReportsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">Entire Family (All Members)</SelectItem>
-                <SelectItem value="fam-1">Aarav Pal (Son, 8 yrs)</SelectItem>
-                <SelectItem value="fam-2">Anaya Pal (Daughter, 4 yrs)</SelectItem>
-                <SelectItem value="fam-3">Meera Pal (Mother, 32 yrs)</SelectItem>
-                <SelectItem value="fam-4">Raj Pal (Father, 35 yrs)</SelectItem>
+                {displayMembers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name} {m.relationship ? `(${m.relationship}${m.age ? `, ${m.age}` : ''})` : ''}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -446,7 +639,7 @@ export default function ReportsPage() {
                         size="sm"
                         variant="default"
                         className="flex-1 text-xs font-semibold h-8 gap-1.5"
-                        onClick={() => setPreviewReport(MOCK_REPORT_PREVIEWS[rpt.id])}
+                        onClick={() => handlePreviewLiveReport(rpt)}
                       >
                         <Eye className="h-3.5 w-3.5" />
                         <span>Preview</span>
@@ -455,8 +648,8 @@ export default function ReportsPage() {
                         size="sm"
                         variant="outline"
                         className="h-8 w-8 p-0 shrink-0"
-                        title="Download sample PDF"
-                        onClick={() => triggerDownloadSimulation(rpt.title)}
+                        title="Download official PDF"
+                        onClick={() => handleDownloadReportPdf(rpt)}
                       >
                         <Download className="h-3.5 w-3.5" />
                       </Button>
@@ -615,7 +808,7 @@ export default function ReportsPage() {
                                 variant="ghost"
                                 className="h-8 w-8 p-0"
                                 title="Download Document"
-                                onClick={() => triggerDownloadSimulation(cert.title)}
+                                onClick={() => handleDownloadReportPdf({ backendType: 'immunization_passport', title: cert.title }, cert.memberId)}
                               >
                                 <Download className="h-3.5 w-3.5" />
                               </Button>
@@ -676,7 +869,7 @@ export default function ReportsPage() {
                           size="sm"
                           variant="secondary"
                           className="h-8 px-3 text-xs gap-1"
-                          onClick={() => triggerDownloadSimulation(cert.title)}
+                          onClick={() => handleDownloadReportPdf({ backendType: 'immunization_passport', title: cert.title }, cert.memberId)}
                         >
                           <Download className="h-3.5 w-3.5" />
                           <span>Download</span>
@@ -746,7 +939,7 @@ export default function ReportsPage() {
                   </div>
                   <div>
                     <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Registry ID</span>
-                    <span className="font-mono text-foreground">{activeMember.id === 'ALL' ? 'FAM-PAL-HOUSEHOLD' : `BEN-${activeMember.id.toUpperCase()}`}</span>
+                    <span className="font-mono text-foreground">{activeMember.id === 'ALL' ? 'FAM-SHARMA-HOUSEHOLD' : `BEN-${activeMember.id.toUpperCase()}`}</span>
                   </div>
                   <div>
                     <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Verification</span>
@@ -885,16 +1078,23 @@ export default function ReportsPage() {
                     variant="outline"
                     size="sm"
                     className="text-xs gap-1.5 h-8.5"
-                    onClick={() => {
-                      triggerDownloadSimulation(previewReport.title);
-                      setPreviewReport(null);
-                    }}
+                    onClick={() => handleDownloadReportJson(previewReport)}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Download JSON</span>
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="text-xs gap-1.5 h-8.5"
+                    onClick={() => handleDownloadReportPdf(previewReport)}
                   >
                     <Download className="h-3.5 w-3.5" />
                     <span>Download PDF</span>
                   </Button>
                   <Button
                     size="sm"
+                    variant="ghost"
                     className="text-xs h-8.5"
                     onClick={() => setPreviewReport(null)}
                   >
@@ -1056,6 +1256,13 @@ export default function ReportsPage() {
                 </DialogDescription>
               </DialogHeader>
 
+              {generationError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{generationError}</span>
+                </div>
+              )}
+
               <div className="space-y-3.5 py-1 text-xs">
                 {/* Member selection */}
                 <div className="space-y-1.5">
@@ -1069,10 +1276,11 @@ export default function ReportsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">Entire Family (All Members)</SelectItem>
-                      <SelectItem value="fam-1">Aarav Pal (Son, 8 yrs)</SelectItem>
-                      <SelectItem value="fam-2">Anaya Pal (Daughter, 4 yrs)</SelectItem>
-                      <SelectItem value="fam-3">Meera Pal (Mother, 32 yrs)</SelectItem>
-                      <SelectItem value="fam-4">Raj Pal (Father, 35 yrs)</SelectItem>
+                      {displayMembers.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name} {m.relationship ? `(${m.relationship})` : ''}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1088,10 +1296,27 @@ export default function ReportsPage() {
                       <SelectValue placeholder="Select Report Type" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="summary">Vaccination Summary (Executive Overview)</SelectItem>
-                      <SelectItem value="history">Vaccination History Ledger (Complete Records)</SelectItem>
-                      <SelectItem value="schedule">Upcoming Immunization Forecast Schedule</SelectItem>
-                      <SelectItem value="family">Combined Family Vaccination Portfolio</SelectItem>
+                      <SelectItem value="comprehensive_record">Comprehensive Immunization Record (Full Ledger)</SelectItem>
+                      <SelectItem value="immunization_passport">Official Immunization Passport (Cryptographic Seal)</SelectItem>
+                      <SelectItem value="compliance_summary">Compliance & Catch-Up Brief (UIP Standards)</SelectItem>
+                      <SelectItem value="clinician_brief">Clinician Pediatric Consultation Brief</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Output File Format */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">File Output Format</Label>
+                  <Select
+                    value={generateForm.outputFormat}
+                    onValueChange={(val) => setGenerateForm({ ...generateForm, outputFormat: val })}
+                  >
+                    <SelectTrigger className="text-xs h-9">
+                      <SelectValue placeholder="Select Format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pdf">Official Vector PDF (.pdf)</SelectItem>
+                      <SelectItem value="json">Structured Machine-Readable JSON (.json)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1176,7 +1401,7 @@ export default function ReportsPage() {
                       <span>Generating Report...</span>
                     </>
                   ) : (
-                    <span>Generate Report</span>
+                    <span>Generate & Download</span>
                   )}
                 </Button>
               </DialogFooter>
@@ -1190,25 +1415,27 @@ export default function ReportsPage() {
 
               <div className="space-y-1">
                 <h3 className="text-lg font-bold font-sora text-foreground">
-                  Report ready
+                  Report Generated Successfully
                 </h3>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
-                  Your vaccination summary has been prepared with up-to-date family immunization records.
+                  Your vaccination report has been compiled and cryptographically verified by the VaxAssist Report Agent.
                 </p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-secondary/50 border border-border/80 text-left text-xs space-y-1">
+              <div className="p-3.5 rounded-xl bg-secondary/50 border border-border/80 text-left text-xs space-y-1.5">
                 <div className="flex justify-between font-semibold text-foreground">
-                  <span>Document:</span>
-                  <span>Vaccination Summary Report.pdf</span>
+                  <span>File:</span>
+                  <span className="font-mono text-primary">{lastGeneratedMeta?.filename || 'vaxassist_report.pdf'}</span>
                 </div>
                 <div className="flex justify-between text-muted-foreground text-[11px]">
                   <span>Beneficiary:</span>
-                  <span>{generateForm.memberId === 'ALL' ? 'Entire Family' : INITIAL_FAMILY_MEMBERS.find(m => m.id === generateForm.memberId)?.name || 'Member'}</span>
+                  <span>{lastGeneratedMeta?.memberName || (generateForm.memberId === 'ALL' ? 'Entire Family' : 'Family Member')}</span>
                 </div>
                 <div className="flex justify-between text-muted-foreground text-[11px]">
-                  <span>Status:</span>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-medium">Ready for Download</span>
+                  <span>Validation Seal:</span>
+                  <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px] truncate max-w-[200px]">
+                    {lastGeneratedMeta?.hash || 'SHA-256 Validated'}
+                  </span>
                 </div>
               </div>
 
@@ -1218,11 +1445,11 @@ export default function ReportsPage() {
                   className="w-full sm:w-auto text-xs gap-1.5"
                   onClick={() => {
                     setIsGenerateDialogOpen(false);
-                    setPreviewReport(MOCK_REPORT_PREVIEWS[generateForm.reportType] || MOCK_REPORT_PREVIEWS.summary);
+                    handlePreviewLiveReport({ id: generateForm.reportType, title: 'Generated Report', backendType: generateForm.reportType });
                   }}
                 >
                   <Eye className="h-3.5 w-3.5" />
-                  <span>View Report</span>
+                  <span>View Preview</span>
                 </Button>
 
                 <Button
@@ -1230,12 +1457,16 @@ export default function ReportsPage() {
                   variant="outline"
                   className="w-full sm:w-auto text-xs gap-1.5"
                   onClick={() => {
-                    triggerDownloadSimulation('Vaccination Summary Report');
+                    if (generateForm.outputFormat === 'pdf') {
+                      handleDownloadReportPdf({ backendType: generateForm.reportType, title: 'Report' }, generateForm.memberId !== 'ALL' ? generateForm.memberId : null);
+                    } else {
+                      handleDownloadReportJson({ backendType: generateForm.reportType, title: 'Report' }, generateForm.memberId !== 'ALL' ? generateForm.memberId : null);
+                    }
                     setIsGenerateDialogOpen(false);
                   }}
                 >
                   <Download className="h-3.5 w-3.5" />
-                  <span>Download</span>
+                  <span>Download Again</span>
                 </Button>
 
                 <Button

@@ -257,8 +257,9 @@ class FamilyService:
                 detail=f"Family member with ID '{member_id}' was not found.",
             )
 
-        # Cross-user tenancy check
-        if user_role != UserRole.ADMIN.value:
+        # Cross-user tenancy check: Patients can only access members belonging to their family.
+        # Admins and verified Healthcare Workers have clinical lookup authorization.
+        if user_role not in (UserRole.ADMIN.value, UserRole.HEALTHCARE_WORKER.value):
             family = await self.get_family_by_id(member["family_id"])
             if not family or family["owner_user_id"] != owner_user_id:
                 raise HTTPException(
@@ -278,6 +279,17 @@ class FamilyService:
         """Update an existing family member, enforcing tenancy check."""
         # Tenancy check
         existing = await self.get_member(owner_user_id, member_id, user_role)
+        if user_role not in (UserRole.PATIENT.value, UserRole.ADMIN.value):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access Denied: Only the household owner or an administrator can modify family member profiles.",
+            )
+        family = await self.get_family_by_id(existing["family_id"])
+        if user_role == UserRole.PATIENT.value and (not family or family["owner_user_id"] != owner_user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access Denied: You do not have permission to modify this family member profile.",
+            )
 
         m_coll = self.get_members_collection()
         try:
@@ -319,7 +331,18 @@ class FamilyService:
     ) -> bool:
         """Delete a family member, enforcing tenancy check."""
         # Tenancy check verifies ownership
-        await self.get_member(owner_user_id, member_id, user_role)
+        existing = await self.get_member(owner_user_id, member_id, user_role)
+        if user_role not in (UserRole.PATIENT.value, UserRole.ADMIN.value):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access Denied: Only the household owner or an administrator can delete family members.",
+            )
+        family = await self.get_family_by_id(existing["family_id"])
+        if user_role == UserRole.PATIENT.value and (not family or family["owner_user_id"] != owner_user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access Denied: You do not have permission to delete this family member.",
+            )
 
         m_coll = self.get_members_collection()
         try:
@@ -330,6 +353,14 @@ class FamilyService:
 
         res = await m_coll.delete_one(query)
         logger.info(f"Deleted member {member_id} (deleted count: {res.deleted_count})")
+
+        # Cascade clean up member's notifications
+        try:
+            from app.services.notification_service import notification_service
+            await notification_service.delete_notifications_for_member(member_id)
+        except Exception as n_err:
+            logger.warning(f"Could not cascade delete notifications for member {member_id}: {n_err}")
+
         return res.deleted_count > 0
 
 

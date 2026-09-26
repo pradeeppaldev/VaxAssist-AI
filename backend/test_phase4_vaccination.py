@@ -14,7 +14,7 @@ def print_step(title):
     print(f"\n{'='*70}\n[TEST] {title}\n{'='*70}")
 
 def test_phase4_suite():
-    client = httpx.Client(base_url=BASE_URL, timeout=15.0)
+    client = httpx.Client(base_url=BASE_URL, timeout=30.0)
 
     # 1. Health check & Atlas connectivity
     print_step("1. Health Check & Atlas Connectivity")

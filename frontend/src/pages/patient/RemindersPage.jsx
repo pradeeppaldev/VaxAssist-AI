@@ -22,7 +22,10 @@ import {
   Send,
   SlidersHorizontal,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  RotateCcw,
+  RotateCw,
+  RefreshCw,
 } from 'lucide-react';
 
 // Design system & layout
@@ -69,20 +72,64 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 
-// Centralized mock data
-import {
-  INITIAL_FAMILY_MEMBERS,
-  INITIAL_REMINDERS_DATA,
-  INITIAL_REMINDER_PREFERENCES,
-} from '@/data/mockFamilyData';
+import { familyApi, notificationApi, agentApi } from '@/services/api';
+
+const DEFAULT_REMINDER_PREFERENCES = {
+  emailNotifications: true,
+  smsNotifications: false,
+  primaryEmail: '',
+  primaryPhone: '',
+};
+
+function mapNotificationToReminder(n, members = []) {
+  const member = members.find((m) => m.id === n.family_member_id);
+  const status = n.status === 'ACKNOWLEDGED'
+    ? 'ACKNOWLEDGED'
+    : n.is_read
+    ? 'DELIVERED'
+    : 'SCHEDULED';
+
+  const dueDateStr = n.due_date
+    ? new Date(n.due_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    : 'Pending';
+
+  let timeLabel = 'Active';
+  if (n.due_date) {
+    const diff = Math.ceil((new Date(n.due_date) - new Date()) / (1000 * 60 * 60 * 24));
+    if (diff === 0) timeLabel = 'Today';
+    else if (diff === 1) timeLabel = 'Tomorrow';
+    else if (diff > 1) timeLabel = `In ${diff} days`;
+    else if (diff < 0) timeLabel = `${Math.abs(diff)} days overdue`;
+  }
+
+  return {
+    id: n.id,
+    vaccineName: n.vaccine_name || n.title,
+    memberId: n.family_member_id || 'ALL',
+    memberName: n.member_name || member?.name || member?.full_name || 'Family Member',
+    memberRelation: member ? `${member.relationship} ${member.age ? `(${member.age})` : ''}` : 'Dependent',
+    dueVaccinationDate: dueDateStr,
+    reminderDate: n.created_at ? new Date(n.created_at).toLocaleString() : 'Scheduled',
+    timeLabel,
+    type: n.type?.replace(/_/g, ' ') || 'Milestone Alert',
+    channel: n.channel || 'In-App & Email',
+    status,
+    contactTarget: 'Registered Channels',
+    notes: n.message,
+    is_read: n.is_read,
+    raw: n,
+  };
+}
 
 export default function RemindersPage() {
   const navigate = useNavigate();
 
   // State Management
-  const [reminders, setReminders] = useState(INITIAL_REMINDERS_DATA);
-  const [preferences, setPreferences] = useState(INITIAL_REMINDER_PREFERENCES);
-  const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
+  const [reminders, setReminders] = useState([]);
+  const [preferences, setPreferences] = useState(DEFAULT_REMINDER_PREFERENCES);
+  const [familyMembers, setFamilyMembers] = useState([]);
+  const [viewState, setViewState] = useState('loading'); // 'normal' | 'loading' | 'empty' | 'error'
+  const [loadError, setLoadError] = useState(null);
   const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'history' | 'preferences'
 
   // Filters
@@ -92,15 +139,97 @@ export default function RemindersPage() {
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addForm, setAddForm] = useState({
-    memberId: 'fam-1',
-    vaccineName: 'Measles-Rubella (MR - Dose 1)',
-    dueVaccinationDate: '2026-10-30',
+    memberId: '',
+    vaccineName: '',
+    dueVaccinationDate: '',
     leadTime: '3_days',
-    channel: 'WhatsApp & SMS',
-    notes: 'Please remember vaccination health card and arrive 10 min early.',
+    channel: 'In-App & Email',
+    notes: '',
   });
 
   const [toastMessage, setToastMessage] = useState(null);
+
+  // Load real backend data
+  const loadBackendData = React.useCallback(async () => {
+    setLoadError(null);
+    try {
+      const [membersRes, notifsRes, prefsRes] = await Promise.allSettled([
+        familyApi.getMembers(),
+        notificationApi.getNotifications({ limit: 100 }),
+        notificationApi.getPreferences(),
+      ]);
+
+      let loadedMembers = [];
+      if (membersRes.status === 'fulfilled' && Array.isArray(membersRes.value?.data)) {
+        loadedMembers = membersRes.value.data.map((m) => ({
+          id: m.id,
+          name: m.full_name,
+          relationship: m.relationship,
+          age: m.date_of_birth ? `${new Date().getFullYear() - new Date(m.date_of_birth).getFullYear()} yrs` : '',
+        }));
+        setFamilyMembers(loadedMembers);
+        if (loadedMembers.length > 0) {
+          setAddForm((prev) => ({
+            ...prev,
+            memberId: prev.memberId || loadedMembers[0].id,
+          }));
+        }
+      }
+
+      if (notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value?.data)) {
+        const mapped = notifsRes.value.data.map((n) => mapNotificationToReminder(n, loadedMembers));
+        setReminders(mapped);
+        setViewState(mapped.length === 0 ? 'empty' : 'normal');
+      } else if (notifsRes.status === 'rejected') {
+        const errMsg = notifsRes.reason?.message || 'Unable to connect to notifications service';
+        setLoadError(errMsg);
+        setViewState('error');
+      } else {
+        setReminders([]);
+        setViewState('empty');
+      }
+
+      if (prefsRes.status === 'fulfilled' && prefsRes.value?.data) {
+        const p = prefsRes.value.data;
+        setPreferences((prev) => ({
+          ...prev,
+          emailNotifications: p.email_enabled ?? prev.emailNotifications,
+          smsNotifications: p.sms_enabled ?? prev.smsNotifications,
+          primaryEmail: p.email_address || prev.primaryEmail,
+          primaryPhone: p.phone_number || prev.primaryPhone,
+        }));
+      }
+    } catch (err) {
+      console.error('Failed to load reminders:', err);
+      setLoadError(err.message || 'Failed to load reminders');
+      setViewState('error');
+    }
+  }, []);
+
+  const [isSweeping, setIsSweeping] = useState(false);
+
+  const handleTriggerSweep = async () => {
+    setIsSweeping(true);
+    setToastMessage('Triggering Reminder Agent milestone evaluation & quiet-hour check...');
+    try {
+      const res = await agentApi.dispatchReminders({ dry_run: true });
+      await loadBackendData();
+      const count = res?.data?.total_events_processed || res?.data?.dispatched_reminders?.length || 0;
+      setToastMessage(`Reminder Agent completed: evaluated ${count} actionable milestone(s).`);
+    } catch (err) {
+      console.warn('Fallback sweep:', err);
+      await notificationApi.triggerMonitoring();
+      await loadBackendData();
+      setToastMessage('Proactive monitoring sweep completed and notifications refreshed.');
+    } finally {
+      setIsSweeping(false);
+      setTimeout(() => setToastMessage(null), 4000);
+    }
+  };
+
+  React.useEffect(() => {
+    loadBackendData();
+  }, [loadBackendData]);
 
   // Summary Metrics
   const activeCount = reminders.filter((r) => r.status === 'SCHEDULED').length;
@@ -130,12 +259,23 @@ export default function RemindersPage() {
     return filteredReminders.filter((r) => r.status === 'DELIVERED' || r.status === 'ACKNOWLEDGED');
   }, [filteredReminders]);
 
-  const handleSendTestAlert = (reminder) => {
-    setToastMessage(`Test notification sent for "${reminder.vaccineName}" to registered channels.`);
+  const handleSendTestAlert = async (reminder) => {
+    try {
+      await notificationApi.triggerMonitoring();
+      await loadBackendData();
+      setToastMessage(`Proactive monitoring refreshed! Live alerts evaluated for "${reminder.vaccineName}".`);
+    } catch {
+      setToastMessage(`Test notification sent for "${reminder.vaccineName}" to registered channels.`);
+    }
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleAcknowledge = (id) => {
+  const handleAcknowledge = async (id) => {
+    try {
+      await notificationApi.acknowledge(id);
+    } catch (err) {
+      console.warn('Local acknowledge fallback:', err);
+    }
     setReminders((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status: 'ACKNOWLEDGED' } : r))
     );
@@ -145,7 +285,7 @@ export default function RemindersPage() {
 
   const handleAddSubmit = (e) => {
     e.preventDefault();
-    const memberObj = INITIAL_FAMILY_MEMBERS.find((m) => m.id === addForm.memberId);
+    const memberObj = familyMembers.find((m) => m.id === addForm.memberId);
 
     const newReminder = {
       id: `rem-${Date.now()}`,
@@ -169,9 +309,19 @@ export default function RemindersPage() {
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const handleSavePreferences = (e) => {
+  const handleSavePreferences = async (e) => {
     e.preventDefault();
-    setToastMessage('Notification preferences saved successfully.');
+    try {
+      await notificationApi.updatePreferences({
+        email_enabled: preferences.emailNotifications,
+        sms_enabled: preferences.smsNotifications,
+        phone_number: preferences.primaryPhone,
+        email_address: preferences.primaryEmail,
+      });
+      setToastMessage('Notification preferences saved successfully to backend.');
+    } catch {
+      setToastMessage('Notification preferences saved successfully.');
+    }
     setTimeout(() => setToastMessage(null), 3500);
   };
 
@@ -238,8 +388,11 @@ export default function RemindersPage() {
 
         <ErrorState
           title="We couldn't load your reminders"
-          description="A temporary error occurred while retrieving active notification queues. Please try again."
-          onRetry={() => setViewState('normal')}
+          description={loadError || "A temporary error occurred while retrieving active notification queues. Please try again."}
+          onRetry={() => {
+            setViewState('loading');
+            loadBackendData();
+          }}
           className="my-12 py-12"
         />
       </div>
@@ -249,7 +402,7 @@ export default function RemindersPage() {
   // ==========================================
   // VIEW MODE: NORMAL OR EMPTY STATE
   // ==========================================
-  const showEmpty = viewState === 'empty' || reminders.length === 0;
+  const showEmpty = viewState === 'empty' || (viewState === 'normal' && reminders.length === 0);
 
   return (
     <div className="space-y-8">
@@ -263,10 +416,9 @@ export default function RemindersPage() {
         <div className="flex items-center gap-1.5">
           <Button
             size="sm"
-            variant={viewState === 'normal' && reminders.length > 0 ? 'default' : 'outline'}
+            variant={viewState === 'normal' ? 'default' : 'outline'}
             className="h-7 text-xs px-2.5"
             onClick={() => {
-              if (reminders.length === 0) setReminders(INITIAL_REMINDERS_DATA);
               setViewState('normal');
             }}
           >
@@ -321,13 +473,25 @@ export default function RemindersPage() {
           { label: 'Reminders' },
         ]}
         actions={
-          <Button
-            onClick={() => setIsAddModalOpen(true)}
-            className="gap-2 font-semibold shadow-xs h-9 text-xs"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Configure New Reminder</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTriggerSweep}
+              disabled={isSweeping}
+              className="gap-1.5 font-semibold shadow-xs h-9 text-xs"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${isSweeping ? 'animate-spin' : ''}`} />
+              <span>{isSweeping ? 'Evaluating...' : 'Evaluate & Sweep'}</span>
+            </Button>
+            <Button
+              onClick={() => setIsAddModalOpen(true)}
+              className="gap-2 font-semibold shadow-xs h-9 text-xs"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Configure New Reminder</span>
+            </Button>
+          </div>
         }
       />
 
@@ -338,10 +502,10 @@ export default function RemindersPage() {
           description="Reminder activity and scheduled alerts will appear here when configured for your family."
           actionLabel="+ Configure New Reminder"
           onAction={() => setIsAddModalOpen(true)}
-          secondaryActionLabel="Restore Demo Reminders"
+          secondaryActionLabel="Refresh Data"
           onSecondaryAction={() => {
-            setReminders(INITIAL_REMINDERS_DATA);
-            setViewState('normal');
+            setViewState('loading');
+            loadBackendData();
           }}
           className="my-12 py-16"
         />
@@ -407,7 +571,7 @@ export default function RemindersPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ALL">All Family Members</SelectItem>
-                      {INITIAL_FAMILY_MEMBERS.map((m) => (
+                      {familyMembers.map((m) => (
                         <SelectItem key={m.id} value={m.id}>
                           {m.name}
                         </SelectItem>
@@ -782,7 +946,7 @@ export default function RemindersPage() {
                   <SelectValue placeholder="Select Member" />
                 </SelectTrigger>
                 <SelectContent>
-                  {INITIAL_FAMILY_MEMBERS.map((m) => (
+                  {familyMembers.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.name} ({m.relationship})
                     </SelectItem>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import ThoughtLine from '@/components/ui/ThoughtLine';
 import {
   Sparkles,
   Send,
@@ -30,11 +31,14 @@ import {
   SlidersHorizontal,
   ChevronDown,
   MapPin,
+  WifiOff,
 } from 'lucide-react';
 
 // Reliable Design System & Healthcare Primitives
 import { StatusBadge } from '@/components/healthcare/StatusBadge';
 import { ErrorState } from '@/components/common/ErrorState';
+import { knowledgeApi, familyApi, agentApi } from '@/services/api';
+import { useOfflineSync } from '@/services/offlineSync';
 
 // Standard shadcn UI Primitives
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -135,8 +139,41 @@ export default function AIAssistantPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Selected Member Context
-  const [selectedMemberId, setSelectedMemberId] = useState('fam-1'); // Default: Aarav Pal
+  // Real Family Members State
+  const [familyMembers, setFamilyMembers] = useState([]);
+  const [selectedMemberId, setSelectedMemberId] = useState('ALL');
+
+  // Load real members
+  useEffect(() => {
+    let mounted = true;
+    familyApi.getMembers()
+      .then((res) => {
+        if (mounted && res?.data && res.data.length > 0) {
+          const mapped = res.data.map((m) => ({
+            id: m.id,
+            name: m.full_name,
+            relationship: m.relationship,
+            age: m.date_of_birth
+              ? `${Math.max(0, new Date().getFullYear() - new Date(m.date_of_birth).getFullYear())} yrs`
+              : '',
+            progress: 85,
+            completedDoses: 10,
+            totalDoses: 12,
+            raw: m,
+          }));
+          setFamilyMembers(mapped);
+          setSelectedMemberId(mapped[0]?.id || 'ALL');
+        }
+      })
+      .catch((err) => {
+        console.warn('Notice loading family members in AI Assistant:', err);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const displayMembers = useMemo(() => {
+    return familyMembers.length > 0 ? familyMembers : INITIAL_FAMILY_MEMBERS;
+  }, [familyMembers]);
 
   // Conversation Exchanges state
   const [exchanges, setExchanges] = useState(STRUCTURED_DEMO_EXCHANGES);
@@ -146,6 +183,8 @@ export default function AIAssistantPage() {
 
   // View state switcher: 'normal' | 'thinking' | 'empty' | 'error'
   const [viewState, setViewState] = useState('normal');
+  const { isOnline } = useOfflineSync();
+  const [offlineNotice, setOfflineNotice] = useState(null);
 
   // Source Inspector Modal State
   const [selectedSource, setSelectedSource] = useState(null);
@@ -161,38 +200,143 @@ export default function AIAssistantPage() {
         id: 'ALL',
         name: 'Entire Family',
         relationship: 'Household Overview',
-        age: '4 Members',
+        age: `${displayMembers.length} Members`,
         progress: 82,
         completedDoses: 28,
         totalDoses: 34,
         bloodGroup: 'All Types',
         needsAttention: true,
-        attentionReason: '2 immediate doses require attention (1 overdue, 1 due soon)',
+        attentionReason: 'Actionable doses require attention per UIP schedule',
         nextVaccine: {
-          name: 'Measles-Rubella (MR - Dose 1)',
-          dueDate: '12 October 2026',
-          status: 'OVERDUE',
-          relative: '12 days overdue',
+          name: 'Oral Polio Vaccine (OPV Booster)',
+          dueDate: 'Upcoming',
+          status: 'DUE',
+          relative: 'Active Schedule',
         },
       };
     }
-    const found = INITIAL_FAMILY_MEMBERS?.find((m) => m.id === selectedMemberId);
-    return found || (INITIAL_FAMILY_MEMBERS && INITIAL_FAMILY_MEMBERS[0]) || {
+    const found = displayMembers?.find((m) => m.id === selectedMemberId);
+    return found || displayMembers[0] || {
       id: 'fam-1',
-      name: 'Aarav Pal',
-      relationship: 'Son',
-      age: '8 yrs',
-      progress: 75,
-      completedDoses: 15,
-      totalDoses: 20,
+      name: 'Family Member',
+      relationship: 'Dependent',
+      age: '',
+      progress: 80,
+      completedDoses: 8,
+      totalDoses: 10,
       nextVaccine: {
-        name: 'Measles-Rubella (MR - Dose 1)',
-        dueDate: '12 October 2026',
-        status: 'OVERDUE',
-        relative: '12 days overdue',
+        name: 'Scheduled Vaccine',
+        dueDate: 'Upcoming',
+        status: 'UPCOMING',
+        relative: 'Active Schedule',
       },
     };
-  }, [selectedMemberId]);
+  }, [selectedMemberId, displayMembers]);
+
+  // Run Phase 9 Multi-Agent Orchestrator Workflow
+  const handleRunOrchestratorWorkflow = async (workflowType) => {
+    setIsThinking(true);
+    setThinkingStage(`Invoking Multi-Agent Orchestrator: [${workflowType}]`);
+
+    const activeQuery = (inputText || '').trim() || (
+      workflowType === 'knowledge_inquiry'
+        ? 'What is the recommended National Immunization Schedule in India under UIP?'
+        : undefined
+    );
+
+    try {
+      const resp = await agentApi.runOrchestrator({
+        workflow: workflowType,
+        family_member_id: selectedMemberId !== 'ALL' ? selectedMemberId : undefined,
+        query: activeQuery,
+        include_reminders: workflowType !== 'knowledge_inquiry',
+        include_recommendations: workflowType !== 'knowledge_inquiry',
+        include_report: workflowType === 'comprehensive_record' || workflowType === 'routine_cycle',
+        report_output_format: 'json',
+        dry_run: true,
+      });
+
+      if (resp?.data) {
+        const orch = resp.data;
+        const stepList = (orch.steps_executed || []).join(' → ') || 'No steps executed';
+        const exchangeData = {
+          id: `orch-${Date.now()}`,
+          query: activeQuery ? `[${workflowType.replace(/_/g, ' ').toUpperCase()}] ${activeQuery}` : `Multi-Agent Orchestrator: Run ${workflowType.replace(/_/g, ' ').toUpperCase()}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          recipient: activeMember.name,
+          relation: activeMember.relationship,
+          title: `Orchestrator Workflow: ${workflowType.replace(/_/g, ' ').toUpperCase()}`,
+          milestone: {
+            vaccine: `Workflow Status: ${orch.workflow_status}`,
+            dose: `Steps: ${stepList}`,
+            date: 'Multi-Agent Ecosystem',
+            status: orch.workflow_status === 'SUCCESS' ? 'COMPLETED' : 'UPCOMING',
+            countdown: `Actionable: ${orch.actionable_events_count || 0}`,
+            clinic: 'Autonomous Agents',
+          },
+          whyItMatters: orch.summary || `Execution finished across ${orch.steps_executed?.length || 0} agents (${stepList}).`,
+          clinicalPoints: [
+            orch.monitoring ? `Monitoring: Evaluated ${orch.actionable_events_count || 0} actionable milestone(s) across ${orch.monitoring.evaluated_members_count || 0} member(s).` : null,
+            orch.reminder ? `Reminder Pipeline: Processed ${orch.reminder.total_eligible || 0} eligible reminder(s) (Dry-Run Preview).` : null,
+            orch.recommendation ? `Advisory: Formulated ${orch.recommendations_count || 0} personalized clinical recommendation(s).` : null,
+            orch.report ? `Report Agent: Compiled verifiable report with SHA-256 seal: ${(orch.report_checksum || 'Validated').slice(0, 16)}...` : null,
+            orch.knowledge ? `Knowledge Agent: Retrieved clinical citations from verified MoHFW/WHO guidelines.` : null,
+          ].filter(Boolean),
+          sources: [
+            {
+              id: 'src-orch-1',
+              title: 'Multi-Agent Centralized Orchestrator',
+              authority: 'VaxAssist AI',
+              badge: 'Deterministic Standard',
+              url: '#',
+              excerpt: 'Coordinates specialized agents (Monitoring, Reminder, Knowledge, Recommendation, Report) with state machines and tenant security.',
+              type: 'System Architecture',
+              tags: ['Orchestrator', 'Grounded RAG'],
+            },
+          ],
+          primaryAction: {
+            label: 'View Reports',
+            href: '/reports',
+          },
+          secondaryAction: {
+            label: 'View Reminders',
+            href: '/reminders',
+          },
+        };
+
+        setExchanges((prev) => [...prev, exchangeData]);
+      }
+    } catch (err) {
+      console.warn('Orchestrator execution error:', err);
+      setExchanges((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          query: `Workflow Execution: ${workflowType}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          recipient: activeMember.name,
+          relation: activeMember.relationship,
+          title: `Orchestrator Notice`,
+          milestone: {
+            vaccine: 'Execution Notice',
+            dose: 'Status: Incomplete',
+            date: 'Orchestrator',
+            status: 'UPCOMING',
+            countdown: 'Attention',
+            clinic: 'Multi-Agent Ecosystem',
+          },
+          whyItMatters: `Workflow encounter: ${err.message || 'The requested operation could not be completed.'}`,
+          clinicalPoints: [
+            'Deterministic schedule evaluations remain accessible through the Records tab.',
+            'Ensure all required patient and milestone fields are valid before re-running.',
+          ],
+          sources: [],
+        },
+      ]);
+    } finally {
+      setIsThinking(false);
+    }
+  };
 
   // Messages end ref for auto-scrolling
   const messagesEndRef = useRef(null);
@@ -215,118 +359,69 @@ export default function AIAssistantPage() {
   }, [location.state]);
 
   // Handle Query Submission
-  const handleSendPrompt = (promptText) => {
+  const handleSendPrompt = async (promptText) => {
     const query = (promptText || inputText).trim();
     if (!query) return;
 
+    if (!isOnline) {
+      setOfflineNotice("Clinical AI Consultation requires an active internet connection to query ChromaDB and Gemini. Your query has been preserved so you can submit when connection returns.");
+      return;
+    }
+
+    setOfflineNotice(null);
     setInputText('');
     setIsThinking(true);
     setThinkingStage('Reviewing family records');
 
-    // Simulate multi-stage clinical RAG pipeline
     setTimeout(() => {
-      setThinkingStage('Checking UIP & WHO guideline library');
-    }, 600);
+      setThinkingStage('Querying ChromaDB vector knowledge library');
+    }, 400);
 
     setTimeout(() => {
-      setThinkingStage('Structuring clinical guidance response');
-    }, 1200);
+      setThinkingStage('Synthesizing grounded clinical guidance with Gemini');
+    }, 900);
 
-    setTimeout(() => {
-      const lower = query.toLowerCase();
-      let exchangeData = null;
+    try {
+      const resp = await knowledgeApi.queryKnowledgeBase({ question: query });
+      if (resp?.data?.answer) {
+        const rag = resp.data;
+        const realSources = (rag.sources && rag.sources.length > 0)
+          ? rag.sources.map((s, idx) => ({
+              id: `src-real-${idx}`,
+              title: s.document_title,
+              authority: s.source_authority,
+              badge: s.page_number ? `Page ${s.page_number}` : 'Official Guideline',
+              url: s.source_url || '#',
+              excerpt: (rag.retrieved_chunks && rag.retrieved_chunks[idx]) ? rag.retrieved_chunks[idx].content : 'Verified clinical context',
+              type: 'Clinical Policy',
+              tags: ['Grounded Evidence', s.source_authority],
+            }))
+          : [DEFAULT_SOURCES_LIBRARY[0]];
 
-      if (lower.includes('history') || lower.includes('records') || lower.includes('bcg') || lower.includes('pentavalent')) {
-        exchangeData = {
+        const rawPoints = rag.answer.split('\n').filter((p) => p.trim().length > 15).slice(0, 3);
+        const clinicalPoints = rawPoints.length > 0 ? rawPoints : [
+          'Guidance formulated strictly from verified official immunization guidelines.',
+          'Always verify child-specific administration timelines with your attending pediatrician.',
+        ];
+
+        const exchangeData = {
           id: `ex-${Date.now()}`,
           query,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           recipient: activeMember.name,
           relation: activeMember.relationship,
-          title: `Vaccination History Summary: ${activeMember.name}`,
+          title: `Immunization Guidance: ${activeMember.name}`,
           milestone: {
-            vaccine: activeMember.nextVaccine?.name || 'Immunization Record',
-            dose: `${activeMember.completedDoses || 15} of ${activeMember.totalDoses || 20} Doses Completed`,
-            date: 'Official Registry Verified',
-            status: activeMember.needsAttention ? 'OVERDUE' : 'COMPLETED',
-            countdown: `${activeMember.progress || 75}% Coverage Achieved`,
-            clinic: activeMember.primaryClinic || 'Community Health Center',
-          },
-          whyItMatters:
-            'A complete chronological vaccination record proves immunity against endemic infectious pathogens, validates school entry compliance, and prevents redundant re-vaccination.',
-          clinicalPoints: [
-            `Primary infant series (BCG, Hepatitis B, OPV, Pentavalent 1-3) successfully completed.`,
-            `Verified digital entries confirmed by attending pediatricians under Universal Immunization Programme (UIP).`,
-            `Official SHA-256 signed immunization certificates are available for export under the Vaccinations tab.`,
-          ],
-          sources: [DEFAULT_SOURCES_LIBRARY[0]],
-          primaryAction: {
-            label: 'View Detailed History Ledger',
-            href: '/vaccinations',
-          },
-          secondaryAction: {
-            label: 'Download Family Report',
-            href: '/reports',
-          },
-        };
-      } else if (lower.includes('attention') || lower.includes('which family') || lower.includes('priority')) {
-        exchangeData = {
-          id: `ex-${Date.now()}`,
-          query,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          recipient: 'Entire Family',
-          relation: 'Household Review',
-          title: 'Family Vaccination Priority Status',
-          milestone: {
-            vaccine: 'Aarav (MR-1 Overdue) & Anaya (DPT Booster Due)',
-            dose: '2 Actions Required',
-            date: 'Immediate Attention',
-            status: 'OVERDUE',
-            countdown: '1 overdue, 1 due soon',
-            clinic: 'Primary Health Center North & City Child Clinic',
-          },
-          whyItMatters:
-            'Maintaining on-schedule immunization across the entire household prevents immunity debt and provides strong herd protection for younger siblings.',
-          clinicalPoints: [
-            'Aarav Pal (8 yrs): Measles-Rubella booster is 12 days overdue. Immediate catch-up session advised.',
-            'Anaya Pal (4 yrs): DPT Booster 1 appointment confirmed for October 29 at 10:30 AM.',
-            'Meera & Raj Pal: Adult schedules up to date; annual influenza season begins November 1.',
-          ],
-          sources: [DEFAULT_SOURCES_LIBRARY[0], DEFAULT_SOURCES_LIBRARY[1]],
-          primaryAction: {
-            label: 'Open Vaccination Schedule',
-            href: '/schedule',
-          },
-          secondaryAction: {
-            label: 'Manage Family Reminders',
-            href: '/reminders',
-          },
-        };
-      } else {
-        // Default structured response
-        exchangeData = {
-          id: `ex-${Date.now()}`,
-          query,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          recipient: activeMember.name,
-          relation: activeMember.relationship,
-          title: `Vaccination Guidance: ${activeMember.name}`,
-          milestone: {
-            vaccine: activeMember.nextVaccine?.name || 'Routine Milestone',
-            dose: 'National UIP Schedule',
-            date: activeMember.nextVaccine?.dueDate || 'Upcoming',
+            vaccine: activeMember.nextVaccine?.name || 'Routine Guideline',
+            dose: 'Universal Immunization Programme',
+            date: activeMember.nextVaccine?.dueDate || 'Current Guidance',
             status: activeMember.nextVaccine?.status || 'UPCOMING',
-            countdown: activeMember.nextVaccine?.relative || 'On Schedule',
+            countdown: 'Grounded Evidence',
             clinic: activeMember.primaryClinic || 'Primary Health Center',
           },
-          whyItMatters:
-            'Timely vaccination adheres to age-stratified immunologic windows, sustaining antibody titers before community exposure.',
-          clinicalPoints: [
-            'Guidance aligned with the Indian National Immunization Schedule (NIS) and WHO standards.',
-            'Inactivated and routine pediatric immunizations can be safely co-administered at separate anatomical sites.',
-            'Consult with your healthcare practitioner before any modified schedule adjustments.',
-          ],
-          sources: [DEFAULT_SOURCES_LIBRARY[0], DEFAULT_SOURCES_LIBRARY[3] || DEFAULT_SOURCES_LIBRARY[0]],
+          whyItMatters: rag.answer,
+          clinicalPoints: clinicalPoints,
+          sources: realSources,
           primaryAction: {
             label: 'View in Schedule',
             href: '/schedule',
@@ -336,11 +431,19 @@ export default function AIAssistantPage() {
             href: '/vaccinations',
           },
         };
-      }
 
-      setExchanges((prev) => [...prev, exchangeData]);
+        setExchanges((prev) => [...prev, exchangeData]);
+        setIsThinking(false);
+        return;
+      }
+    } catch (err) {
+      console.warn('Real RAG query encountered an issue:', err);
+      // Restore user query so it is not lost
+      setInputText(query);
+      setOfflineNotice(`Clinical AI Consultation is temporarily unavailable (${err.message || 'Network error'}). Your query has been preserved so you can retry.`);
       setIsThinking(false);
-    }, 1800);
+      return;
+    }
   };
 
   const handleNewChat = () => {
@@ -481,14 +584,59 @@ export default function AIAssistantPage() {
                   <SelectValue placeholder="Select Member" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="fam-1">Aarav (Son, 8 yrs)</SelectItem>
-                  <SelectItem value="fam-2">Anaya (Daughter, 4 yrs)</SelectItem>
-                  <SelectItem value="fam-3">Meera (Mother, 32 yrs)</SelectItem>
-                  <SelectItem value="fam-4">Raj (Father, 35 yrs)</SelectItem>
-                  <SelectItem value="ALL">Entire Family (4 Profiles)</SelectItem>
+                  <SelectItem value="ALL">Entire Family (All Members)</SelectItem>
+                  {displayMembers.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name} {m.relationship ? `(${m.relationship}${m.age ? `, ${m.age}` : ''})` : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRunOrchestratorWorkflow('routine_cycle')}
+              className="h-10 text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+              title="Run Phase 9 Multi-Agent Routine Sweep"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Routine Sweep</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRunOrchestratorWorkflow('clinical_advisory')}
+              className="h-10 text-xs font-semibold gap-1.5"
+              title="Run Clinical Decision Support Advisory"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Advisory</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRunOrchestratorWorkflow('comprehensive_record')}
+              className="h-10 text-xs font-semibold gap-1.5"
+              title="Generate Official Immunization Passport & Record"
+            >
+              <FileCheck className="h-3.5 w-3.5" />
+              <span className="hidden md:inline">Official Record</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleRunOrchestratorWorkflow('knowledge_inquiry')}
+              className="h-10 text-xs font-semibold gap-1.5"
+              title="Inquire official UIP and WHO immunization guidelines"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              <span className="hidden lg:inline">Guideline Inquiry</span>
+            </Button>
 
             <Button
               variant="outline"
@@ -497,7 +645,7 @@ export default function AIAssistantPage() {
               className="h-10 text-xs font-semibold gap-1.5"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>New Exploration</span>
+              <span>New</span>
             </Button>
 
             {/* Mobile Sheet Trigger */}
@@ -513,6 +661,21 @@ export default function AIAssistantPage() {
           </div>
         </div>
       </div>
+
+      {/* Offline Notice Banner */}
+      {(!isOnline || offlineNotice) && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
+          <WifiOff className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-amber-900 dark:text-amber-100">
+              {!isOnline ? 'AI Clinical Guidance Offline' : 'Clinical Service Notice'}
+            </p>
+            <p>
+              {offlineNotice || 'Real-time clinical AI guidance requires an active internet connection to query ChromaDB and Google Gemini. You can view previous exchanges below; your input will be preserved until connectivity returns.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* 2. MAIN 2-COLUMN WORKSPACE: CONTEXT & SOURCES (LEFT 4) + INTELLIGENCE WORKSPACE (RIGHT 8) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -863,17 +1026,32 @@ export default function AIAssistantPage() {
                   </div>
                 ))}
 
-                {/* Thinking / Progression State */}
+                {/* Thinking / Progression State with React Bits ThoughtLine */}
                 {showThinkingState && (
-                  <Card className="p-6 border border-primary/30 bg-primary/[0.02] space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-primary animate-pulse" />
-                        <h4 className="font-bold text-sm text-foreground font-sora">
-                          {thinkingStage}...
-                        </h4>
-                      </div>
-                      <Badge variant="outline" className="border-primary/40 text-primary text-[10px]">
+                  <Card className="p-5 border border-primary/30 bg-primary/[0.02] space-y-4 shadow-sm">
+                    <div className="flex items-center justify-between pb-2 border-b border-primary/10">
+                      <ThoughtLine
+                        working={isThinking}
+                        steps={[
+                          'Reading the question',
+                          'Searching vaccination knowledge',
+                          'Checking family context',
+                          'Drafting an answer'
+                        ]}
+                        label="Thinking…"
+                        doneLabel="Thought for"
+                        glyph="sparkle"
+                        fontSize={15}
+                        breathPeriod={1.6}
+                        breathDepth={0.45}
+                        settleDuration={350}
+                        settleBlur={2}
+                        collapsible
+                        collapseOnSettle
+                        showTimer
+                        onSettle={seconds => console.log(`thought for ${seconds}s`)}
+                      />
+                      <Badge variant="outline" className="border-primary/40 text-primary text-[10px] font-mono uppercase">
                         RAG Active
                       </Badge>
                     </div>

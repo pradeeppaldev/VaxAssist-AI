@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { knowledgeApi } from '@/services/api';
 import { 
   Database, 
   Search, 
@@ -119,8 +120,8 @@ import {
 const ITEMS_PER_PAGE = 5;
 
 export function AdminKnowledgeBasePage() {
-  const [documents, setDocuments] = useState(MOCK_KB_DOCUMENTS);
-  const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'indexing' | 'error'
+  const [documents, setDocuments] = useState([]);
+  const [viewState, setViewState] = useState('loading'); // 'normal' | 'loading' | 'empty' | 'indexing' | 'error'
 
   // Filter & Search states
   const [searchQuery, setSearchQuery] = useState('');
@@ -149,9 +150,64 @@ export function AdminKnowledgeBasePage() {
     filename: 'UIP_Supplementary_Addendum_2026.pdf',
     filesize: '3.4 MB',
   });
+  const fileInputRef = useRef(null);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStepText, setUploadStepText] = useState('');
+
+  // Load backend documents on mount
+  const loadBackendDocuments = async () => {
+    try {
+      const resp = await knowledgeApi.listDocuments();
+      if (resp?.data?.documents) {
+        if (resp.data.documents.length > 0) {
+          const backendDocs = resp.data.documents.map((d) => ({
+            id: d.id,
+            title: d.title,
+            filename: d.original_filename,
+            filesize: d.file_size_bytes ? `${(d.file_size_bytes / (1024 * 1024)).toFixed(1)} MB` : '1.2 MB',
+            filetype: d.mime_type,
+            pages: Math.max(1, Math.ceil((d.chunk_count || 1) / 3)),
+            sha256: d.id,
+            category: d.document_type || 'Guideline',
+            source: d.source_authority || 'MoHFW',
+            authorityType: 'Governmental / Clinical',
+            version: `v1.${d.index_version || 1}`,
+            status: d.status === 'INDEXED' ? 'ACTIVE' : d.status,
+            indexingStatus: d.status,
+            chunksCount: d.chunk_count || 0,
+            uploadedAt: d.created_at,
+            uploadedAgo: 'Recently',
+            lastIndexed: d.indexed_at ? new Date(d.indexed_at).toLocaleDateString() : 'Pending',
+            effectiveDate: d.publication_date || new Date().toISOString().split('T')[0],
+            description: d.description || '',
+            tags: [d.document_type, d.source_authority].filter(Boolean),
+            chunks: [],
+            versionHistory: [
+              { version: `v1.${d.index_version || 1}`, date: new Date(d.created_at).toISOString().split('T')[0], author: 'System Administrator', changeSummary: `ChromaDB vector indexing (${d.chunk_count || 0} chunks).` },
+            ],
+          }));
+          setDocuments(backendDocs);
+          setViewState('normal');
+        } else {
+          setDocuments([]);
+          setViewState('empty');
+        }
+      } else {
+        setDocuments([]);
+        setViewState('empty');
+      }
+    } catch (e) {
+      console.warn('Could not load backend documents:', e);
+      setDocuments([]);
+      setViewState('empty');
+    }
+  };
+
+  useEffect(() => {
+    loadBackendDocuments();
+  }, []);
 
   // Document Details Sheet State
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -170,96 +226,8 @@ export function AdminKnowledgeBasePage() {
   // Chunks search filter inside details sheet
   const [chunkSearchQuery, setChunkSearchQuery] = useState('');
 
-  // Global Re-indexing Timer Simulation
-  useEffect(() => {
-    let timer;
-    if (isReindexingAll) {
-      timer = setInterval(() => {
-        setReindexProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(timer);
-            setIsReindexingAll(false);
-            setToastNotice('ChromaDB Knowledge Collection fully re-indexed. 2,450 vector chunks validated with text-embedding-004.');
-            return 100;
-          }
-          const next = prev + 15;
-          if (next < 30) setReindexStatusText('Parsing documents & extracting text layers...');
-          else if (next < 60) setReindexStatusText('Generating 768-dim embeddings via Google Vertex AI...');
-          else if (next < 90) setReindexStatusText('Updating ChromaDB HNSW vector index...');
-          else setReindexStatusText('Finalizing deterministic grounding verification...');
-          return next;
-        });
-      }, 600);
-    }
-    return () => clearInterval(timer);
-  }, [isReindexingAll]);
+  // Re-indexing state is managed asynchronously via handleStartReindexAll
 
-  // Upload Progress Timer Simulation
-  useEffect(() => {
-    let timer;
-    if (isUploading) {
-      timer = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(timer);
-            setIsUploading(false);
-
-            // Add synthetic uploaded document
-            const newDoc = {
-              id: `DOC-NEW-${Date.now().toString().slice(-4)}`,
-              title: uploadForm.title || 'New Immunization Clinical Addendum',
-              filename: uploadForm.filename,
-              filesize: uploadForm.filesize,
-              filetype: 'application/pdf',
-              pages: 36,
-              sha256: 'a1b2c3d4e5f6789012345678abcdef0123456789abcdef0123456789abcdef01',
-              category: uploadForm.category,
-              source: uploadForm.source,
-              authorityType: 'Governmental / Clinical',
-              version: uploadForm.version,
-              status: 'ACTIVE',
-              indexingStatus: 'INDEXED',
-              chunksCount: 142,
-              uploadedAt: new Date().toISOString(),
-              uploadedAgo: 'Just now',
-              lastIndexed: 'Just now',
-              effectiveDate: uploadForm.effectiveDate,
-              description: uploadForm.description || 'Clinical guidance document uploaded via Admin Console.',
-              tags: uploadForm.tags.split(',').map((t) => t.trim()),
-              chunks: [
-                {
-                  chunkId: 'CHK-NEW-001',
-                  section: 'Section 1.1: Clinical Scope & Target Cohorts',
-                  tokens: 380,
-                  embeddingDim: 768,
-                  collection: 'uip_clinical_guidelines_2026',
-                  sourceRef: `${uploadForm.filename}, Page 3`,
-                  score: '0.95 Similarity',
-                  contentSnippet: 'Standardized operational protocol defining target age cohorts, storage temperature specifications, and co-administration compatibility matrices aligned with National Immunization Schedule regimens.',
-                },
-              ],
-              versionHistory: [
-                { version: uploadForm.version, date: new Date().toISOString().split('T')[0], author: 'System Administrator (Pradeep Pal)', changeSummary: 'Initial document upload and ChromaDB vector chunk ingestion.' },
-              ],
-            };
-
-            setDocuments((prev) => [newDoc, ...prev]);
-            setUploadDialogOpen(false);
-            setToastNotice(`"${newDoc.title}" successfully uploaded, parsed, and indexed (142 vector chunks created).`);
-            setUploadProgress(0);
-            return 100;
-          }
-          const next = prev + 20;
-          if (next < 30) setUploadStepText('Uploading document binary to storage...');
-          else if (next < 60) setUploadStepText('Parsing PDF text & table structure...');
-          else if (next < 85) setUploadStepText('Embedding semantic chunks (text-embedding-004)...');
-          else setUploadStepText('Ingesting vector records into ChromaDB collection...');
-          return next;
-        });
-      }, 500);
-    }
-    return () => clearInterval(timer);
-  }, [isUploading, uploadForm]);
 
   // Filtered & Sorted Documents computation
   const filteredDocuments = useMemo(() => {
@@ -303,21 +271,47 @@ export function AdminKnowledgeBasePage() {
   }, [filteredDocuments, currentPage]);
 
   // Handlers
-  const handleStartReindexAll = () => {
+  const handleStartReindexAll = async () => {
     setConfirmReindexAllOpen(false);
+    if (!documents || documents.length === 0) {
+      setToastNotice('No documents in collection to re-index.');
+      return;
+    }
     setIsReindexingAll(true);
-    setReindexProgress(5);
-    setReindexStatusText('Initializing ChromaDB collection re-indexing...');
+    setReindexProgress(10);
+    setReindexStatusText('Initiating ChromaDB collection re-indexing...');
+    let successCount = 0;
+    try {
+      for (let i = 0; i < documents.length; i++) {
+        const d = documents[i];
+        setReindexStatusText(`Re-indexing document ${i + 1}/${documents.length}: "${d.title || d.filename}"...`);
+        try {
+          await knowledgeApi.reindexDocument(d.id);
+          successCount++;
+        } catch (e) {
+          console.warn(`Failed to re-index document ${d.id}:`, e);
+        }
+        setReindexProgress(Math.round(((i + 1) / documents.length) * 100));
+      }
+      await loadBackendDocuments();
+      setToastNotice(`Collection re-indexing complete: ${successCount} of ${documents.length} document(s) successfully re-indexed in ChromaDB with Gemini Embedding 2.`);
+    } catch (err) {
+      setToastNotice(`Re-indexing encountered an error: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsReindexingAll(false);
+    }
   };
 
-  const handleReindexSingleDocument = (doc) => {
-    setToastNotice(`Re-indexing initiated for "${doc.filename}". Re-vectorizing ${doc.chunksCount} chunks...`);
-    setTimeout(() => {
-      setDocuments((prev) =>
-        prev.map((d) => (d.id === doc.id ? { ...d, indexingStatus: 'INDEXED', lastIndexed: 'Just now' } : d))
-      );
-      setToastNotice(`Completed re-indexing for "${doc.filename}". 0 embedding drift detected.`);
-    }, 2000);
+  const handleReindexSingleDocument = async (doc) => {
+    setToastNotice(`Re-indexing initiated for "${doc.filename}". Re-vectorizing chunks with Gemini Embedding 2...`);
+    try {
+      await knowledgeApi.reindexDocument(doc.id);
+      await loadBackendDocuments();
+      setToastNotice(`Completed re-indexing for "${doc.filename}". ChromaDB vectors updated.`);
+    } catch (err) {
+      console.error('Re-index error:', err);
+      setToastNotice(`Re-indexing failed for "${doc.filename}": ${err.message || 'Error communicating with backend'}`);
+    }
   };
 
   const handleOpenDetails = (doc, defaultTab = 'overview') => {
@@ -327,8 +321,13 @@ export function AdminKnowledgeBasePage() {
     setDetailsSheetOpen(true);
   };
 
-  const handleDeleteDocument = () => {
+  const handleDeleteDocument = async () => {
     if (!documentToDelete) return;
+    try {
+      await knowledgeApi.deleteDocument(documentToDelete.id);
+    } catch (err) {
+      console.warn('Could not delete from backend:', err);
+    }
     setDocuments((prev) => prev.filter((d) => d.id !== documentToDelete.id));
     setToastNotice(`Document "${documentToDelete.filename}" and its vector chunks deleted from ChromaDB.`);
     setConfirmDeleteOpen(false);
@@ -525,7 +524,7 @@ export function AdminKnowledgeBasePage() {
           <Progress value={reindexProgress} className="h-2" />
           <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
             <span>{reindexStatusText}</span>
-            <span>Target: ChromaDB (2,450 chunks)</span>
+            <span>Target: ChromaDB ({documents.reduce((acc, d) => acc + (d.chunksCount || 0), 0)} chunks)</span>
           </div>
         </Card>
       )}
@@ -543,10 +542,10 @@ export function AdminKnowledgeBasePage() {
         />
         <MetricCard
           title="Vector Chunks"
-          value={MOCK_KB_METRICS.totalChunks.toLocaleString()}
-          subtext="Avg 384 tokens / chunk"
+          value={documents.reduce((acc, d) => acc + (d.chunksCount || 0), 0).toLocaleString()}
+          subtext="MoHFW UIP semantic chunks"
           icon={Layers}
-          badgeText="768 dim"
+          badgeText="3072 dim"
           badgeVariant="secondary"
           accentColor="cyan"
         />
@@ -1006,7 +1005,7 @@ export function AdminKnowledgeBasePage() {
               <span>Ingest Guideline into RAG Knowledge Base</span>
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
-              Uploaded PDF documents are parsed into semantic vector chunks and indexed in ChromaDB with text-embedding-004.
+              Uploaded guideline documents are parsed into semantic vector chunks and indexed in ChromaDB with Gemini Embedding 2 (3072 dimensions).
             </DialogDescription>
           </DialogHeader>
 
@@ -1024,16 +1023,72 @@ export function AdminKnowledgeBasePage() {
             </div>
           ) : (
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                setIsUploading(true);
-                setUploadProgress(10);
-                setUploadStepText('Uploading document binary...');
+                if (typeof navigator !== 'undefined' && !navigator.onLine) {
+                  setToastNotice('Document ingestion and vector indexing require an active internet connection to contact Gemini embedding models.');
+                  return;
+                }
+                if (selectedFile) {
+                  setIsUploading(true);
+                  setUploadProgress(20);
+                  setUploadStepText('Uploading document binary to storage...');
+                  try {
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+                    formData.append('title', uploadForm.title || selectedFile.name);
+                    if (uploadForm.description) formData.append('description', uploadForm.description);
+                    formData.append('document_type', 'GUIDELINE');
+                    formData.append('source_authority', 'MOHFW');
+                    if (uploadForm.effectiveDate) formData.append('publication_date', uploadForm.effectiveDate);
+
+                    setUploadProgress(50);
+                    setUploadStepText('Generating Gemini Embedding 2 vectors...');
+
+                    const resp = await knowledgeApi.uploadDocument(formData);
+                    setUploadProgress(95);
+                    setUploadStepText('Writing vector index into ChromaDB...');
+
+                    await loadBackendDocuments();
+                    setIsUploading(false);
+                    setUploadDialogOpen(false);
+                    setSelectedFile(null);
+                    setToastNotice(`"${resp?.data?.title || uploadForm.title}" successfully uploaded and indexed!`);
+                  } catch (err) {
+                    setIsUploading(false);
+                    setToastNotice(`Upload failed: ${err.message || 'Error processing document'}`);
+                  }
+                } else {
+                  setToastNotice('Please select a valid document file (.pdf, .docx, .txt, .md) to upload.');
+                }
               }}
               className="space-y-4"
             >
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.docx,.txt,.md"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setSelectedFile(file);
+                    setUploadForm((prev) => ({
+                      ...prev,
+                      title: prev.title || file.name.replace(/\.[^/.]+$/, ''),
+                      filename: file.name,
+                      filesize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+                    }));
+                  }
+                }}
+              />
+
               {/* Drag and Drop Upload Area */}
-              <div className="border-2 border-dashed border-border/80 hover:border-primary/60 rounded-xl p-6 text-center space-y-2 bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-border/80 hover:border-primary/60 rounded-xl p-6 text-center space-y-2 bg-muted/20 hover:bg-muted/30 transition-colors cursor-pointer"
+              >
                 <div className="p-2.5 rounded-full bg-primary/10 text-primary w-10 h-10 mx-auto flex items-center justify-center">
                   <Upload className="h-5 w-5" />
                 </div>
@@ -1042,13 +1097,13 @@ export function AdminKnowledgeBasePage() {
                     Drop PDF guideline here, or <span className="text-primary hover:underline">browse files</span>
                   </p>
                   <p className="text-[11px] text-muted-foreground font-mono">
-                    Supports clinical PDF, DOCX, TXT (Maximum file size: 25 MB)
+                    Supports clinical PDF, TXT, MD (Maximum file size: 15 MB)
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-2 p-2 rounded-lg bg-card border border-border text-xs text-foreground font-mono mt-2">
                   <FileText className="h-3.5 w-3.5 text-primary" />
-                  <span>{uploadForm.filename}</span>
-                  <span className="text-muted-foreground">({uploadForm.filesize})</span>
+                  <span>{selectedFile ? selectedFile.name : uploadForm.filename}</span>
+                  <span className="text-muted-foreground">({selectedFile ? `${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB` : uploadForm.filesize})</span>
                 </div>
               </div>
 
@@ -1548,7 +1603,7 @@ export function AdminKnowledgeBasePage() {
               <span>Re-index Entire Knowledge Base?</span>
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs leading-relaxed">
-              This will re-calculate semantic vector embeddings across all 48 guidelines (2,450 chunks) using <strong>Google Vertex AI text-embedding-004</strong> and rebuild the HNSW graph in ChromaDB.
+              This will re-calculate semantic vector embeddings across all guidelines in the collection using <strong>Google Gemini Embedding 2 (3072 dimensions)</strong> and update the HNSW cosine vector index in ChromaDB.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

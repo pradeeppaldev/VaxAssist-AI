@@ -69,11 +69,12 @@ class VaccinationService:
 
         # 2. Medical consistency: administered_date vs member date_of_birth
         member_dob_raw = member.get("date_of_birth")
-        member_dob = (
-            date.fromisoformat(member_dob_raw)
-            if isinstance(member_dob_raw, str)
-            else member_dob_raw
-        )
+        if isinstance(member_dob_raw, str):
+            member_dob = date.fromisoformat(member_dob_raw.split("T")[0])
+        elif isinstance(member_dob_raw, datetime):
+            member_dob = member_dob_raw.date()
+        else:
+            member_dob = member_dob_raw
 
         if req.administered_date < member_dob:
             raise HTTPException(
@@ -102,6 +103,29 @@ class VaccinationService:
                 detail=f"Dose {req.dose_number} for vaccine '{req.vaccine_code}' has already been recorded for {member['full_name']}.",
             )
 
+        # 4. Clinical chronological validation: subsequent dose cannot be on or before previous dose
+        if req.dose_number > 1:
+            prev_dose = await coll.find_one({
+                "family_member_id": member_id,
+                "vaccine_code": req.vaccine_code,
+                "dose_number": req.dose_number - 1,
+            })
+            if prev_dose:
+                prev_date_raw = prev_dose.get("administered_date")
+                prev_date = (
+                    date.fromisoformat(prev_date_raw.split("T")[0])
+                    if isinstance(prev_date_raw, str)
+                    else (prev_date_raw.date() if hasattr(prev_date_raw, "date") else prev_date_raw)
+                )
+                if req.administered_date <= prev_date:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            f"Clinical Validation Error: Dose {req.dose_number} administered date ({req.administered_date}) "
+                            f"cannot be on or before Dose {req.dose_number - 1} administered date ({prev_date})."
+                        ),
+                    )
+
         now = datetime.now(timezone.utc)
         record_doc = {
             "family_member_id": member_id,
@@ -125,6 +149,16 @@ class VaccinationService:
             record_doc.pop("_id")
 
         logger.info(f"Recorded vaccine {req.vaccine_code} Dose {req.dose_number} for member {member_id}")
+
+        # Proactively re-evaluate member monitoring schedule & resolve completed alerts for the patient household
+        try:
+            family = await family_service.get_family_by_id(member["family_id"])
+            patient_owner_id = family["owner_user_id"] if family else owner_user_id
+            from app.services.monitoring_engine import monitoring_engine
+            await monitoring_engine.monitor_family_member(patient_owner_id, member)
+        except Exception as mon_err:
+            logger.warning(f"Could not re-evaluate monitoring after adding record: {mon_err}")
+
         return record_doc
 
     async def list_records_for_member(
@@ -182,11 +216,12 @@ class VaccinationService:
             owner_user_id, existing["family_member_id"], user_role
         )
         member_dob_raw = member.get("date_of_birth")
-        member_dob = (
-            date.fromisoformat(member_dob_raw)
-            if isinstance(member_dob_raw, str)
-            else member_dob_raw
-        )
+        if isinstance(member_dob_raw, str):
+            member_dob = date.fromisoformat(member_dob_raw.split("T")[0])
+        elif hasattr(member_dob_raw, "date") and callable(member_dob_raw.date):
+            member_dob = member_dob_raw.date()
+        else:
+            member_dob = member_dob_raw
 
         update_fields: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
 
@@ -233,6 +268,16 @@ class VaccinationService:
         )
 
         logger.info(f"Updated vaccination record {record_id}")
+
+        # Proactively re-evaluate member monitoring schedule for the patient household
+        try:
+            family = await family_service.get_family_by_id(member["family_id"])
+            patient_owner_id = family["owner_user_id"] if family else owner_user_id
+            from app.services.monitoring_engine import monitoring_engine
+            await monitoring_engine.monitor_family_member(patient_owner_id, member)
+        except Exception as mon_err:
+            logger.warning(f"Could not re-evaluate monitoring after updating record: {mon_err}")
+
         return format_doc(updated)
 
     async def delete_record(
@@ -242,7 +287,7 @@ class VaccinationService:
         user_role: str = UserRole.PATIENT.value,
     ) -> bool:
         """Delete a vaccination record, verifying ownership."""
-        await self.get_record(owner_user_id, record_id, user_role)
+        existing = await self.get_record(owner_user_id, record_id, user_role)
         coll = self.get_collection()
 
         try:
@@ -253,6 +298,15 @@ class VaccinationService:
 
         res = await coll.delete_one(query)
         logger.info(f"Deleted vaccination record {record_id}")
+
+        # Proactively re-evaluate member monitoring schedule now that record is removed
+        try:
+            member = await self._verify_member_access(owner_user_id, existing["family_member_id"], user_role)
+            from app.services.monitoring_engine import monitoring_engine
+            await monitoring_engine.monitor_family_member(owner_user_id, member)
+        except Exception as mon_err:
+            logger.warning(f"Could not re-evaluate monitoring after deleting record: {mon_err}")
+
         return res.deleted_count > 0
 
     async def get_member_schedule(
