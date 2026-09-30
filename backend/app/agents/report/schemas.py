@@ -22,6 +22,9 @@ class ReportType(str, Enum):
     VACCINATION_STATUS = "vaccination_status"
     PROGRESS_SUMMARY = "progress_summary"
     COMPREHENSIVE_RECORD = "comprehensive_record"
+    CLINICIAN_BRIEF = "clinician_brief"
+    CLINICAL_AUDIT = "clinical_audit"
+    VACCINATION_CERTIFICATE = "vaccination_certificate"
 
 
 class ReportOutputFormat(str, Enum):

@@ -60,7 +60,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
-import { vaccinationApi } from '@/services/api';
+import { vaccinationApi, agentApi } from '@/services/api';
+import { useDemoMode } from '@/context/DemoModeContext';
 import { MOCK_PATIENTS_REGISTRY, MOCK_HEALTHCARE_WORKER } from '@/data/mockHealthcareData';
 
 export default function HealthcarePatientDetailPage() {
@@ -97,9 +98,53 @@ export default function HealthcarePatientDetailPage() {
     return found || MOCK_PATIENTS_REGISTRY[0]; // Fallback to Aarav Sharma
   }, [id]);
 
+  const { isDemoMode, downloadDemoPdf } = useDemoMode();
+
   const showToast = (msg) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3000);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleIssueCertificate = async () => {
+    const cleanName = patient.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const filename = `vaxassist_certificate_${cleanName}.pdf`;
+    showToast(`Generating verified immunization certificate for ${patient.name}...`);
+    try {
+      if (isDemoMode) {
+        downloadDemoPdf(filename, `Official Immunization Certificate - ${patient.name}`);
+        showToast(`Downloaded verified certificate for ${patient.name}`);
+        return;
+      }
+      await agentApi.downloadReportPdf({
+        report_type: 'vaccination_history',
+        family_member_id: patient.id,
+      }, filename);
+      showToast(`Downloaded verified certificate for ${patient.name}`);
+    } catch (err) {
+      console.error('Certificate download error:', err);
+      showToast(`Certificate download failed: ${err.message || 'Please try again'}`);
+    }
+  };
+
+  const handleDownloadRecordPdf = async () => {
+    const cleanName = patient.name.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const filename = `vaxassist_clinical_record_${cleanName}.pdf`;
+    showToast(`Generating complete clinical record PDF for ${patient.name}...`);
+    try {
+      if (isDemoMode) {
+        downloadDemoPdf(filename, `Comprehensive Immunization Ledger - ${patient.name}`);
+        showToast(`Downloaded clinical record for ${patient.name}`);
+        return;
+      }
+      await agentApi.downloadReportPdf({
+        report_type: 'comprehensive_record',
+        family_member_id: patient.id,
+      }, filename);
+      showToast(`Downloaded clinical record for ${patient.name}`);
+    } catch (err) {
+      console.error('Record download error:', err);
+      showToast(`Record download failed: ${err.message || 'Please try again'}`);
+    }
   };
 
   // Handle Record Submission
@@ -301,10 +346,20 @@ export default function HealthcarePatientDetailPage() {
                     size="sm"
                     variant="outline"
                     className="text-xs h-9 gap-1.5"
-                    onClick={() => showToast(`Generated clinical immunization certificate for ${patient.name}`)}
+                    onClick={handleIssueCertificate}
                   >
                     <FileText className="h-3.5 w-3.5" />
                     <span>Issue Certificate</span>
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-9 gap-1.5"
+                    onClick={handleDownloadRecordPdf}
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Download Record (PDF)</span>
                   </Button>
                 </div>
               </div>

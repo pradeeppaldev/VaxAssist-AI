@@ -1,5 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { familyApi, vaccinationApi } from '@/services/api';
 import {
   Users,
   Calendar,
@@ -86,32 +88,198 @@ import {
 export default function FamilyMemberDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isDemoMode, demoStore, updateDemoMember, deleteDemoMember } = useDemoMode();
 
-  // Find member from demo data or default to first member
-  const initialMember = useMemo(() => {
-    return INITIAL_FAMILY_MEMBERS.find((m) => m.id === id) || INITIAL_FAMILY_MEMBERS[0];
-  }, [id]);
-
-  const [member, setMember] = useState(initialMember);
-  const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'error'
+  const [member, setMember] = useState(null);
+  const [viewState, setViewState] = useState('loading'); // 'normal' | 'loading' | 'error'
   const [activeTab, setActiveTab] = useState('overview');
 
   // Modals
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
-  const [editFormData, setEditFormData] = useState({ ...initialMember });
+  const [editFormData, setEditFormData] = useState({});
   const [formErrors, setFormErrors] = useState({});
   const [successToast, setSuccessToast] = useState(null);
 
   // Quick record dose state
   const [recordDoseData, setRecordDoseData] = useState({
-    vaccineName: initialMember?.nextVaccine?.name || 'DPT Booster',
+    vaccineName: 'DPT Booster',
     date: new Date().toISOString().split('T')[0],
-    clinic: initialMember?.primaryClinic || 'City Child Clinic',
+    clinic: 'Lilavati Hospital & Research Centre',
     batch: 'BT-2026-X01',
     site: 'Left Upper Arm (Deltoid)',
   });
+
+  // Load Member Data (Live Mode vs Demo Mode)
+  useEffect(() => {
+    if (isDemoMode) {
+      const found = (demoStore.familyMembers || []).find((m) => m.id === id) ||
+                    INITIAL_FAMILY_MEMBERS.find((m) => m.id === id);
+      if (found) {
+        setMember(found);
+        setEditFormData({ ...found });
+        setRecordDoseData((prev) => ({
+          ...prev,
+          vaccineName: found.nextVaccine?.name || 'DPT Booster',
+          clinic: found.primaryClinic || 'City Child Clinic',
+        }));
+        setViewState('normal');
+      } else {
+        setViewState('error');
+      }
+      return;
+    }
+
+    // Live Mode: Fetch member profile, schedule, and records from API
+    let isMounted = true;
+    const fetchLiveMember = async () => {
+      setViewState('loading');
+      try {
+        const [memRes, schRes, recRes] = await Promise.allSettled([
+          familyApi.getMember(id),
+          vaccinationApi.getMemberSchedule(id),
+          vaccinationApi.getMemberRecords(id),
+        ]);
+
+        if (!isMounted) return;
+
+        if (memRes.status !== 'fulfilled' || !memRes.value?.data) {
+          setViewState('error');
+          return;
+        }
+
+        const m = memRes.value.data;
+        const sch = schRes.status === 'fulfilled' ? schRes.value?.data : null;
+        const records = recRes.status === 'fulfilled' && Array.isArray(recRes.value?.data) ? recRes.value.data : [];
+
+        const birthYear = m.date_of_birth ? new Date(m.date_of_birth).getFullYear() : new Date().getFullYear();
+        const ageYears = Math.max(0, new Date().getFullYear() - birthYear);
+        const isChild = ageYears < 18 || m.relationship === 'CHILD';
+        const initials = (m.full_name || 'FM')
+          .split(' ')
+          .filter(Boolean)
+          .map((n) => n[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase() || 'FM';
+
+        const summary = sch?.summary || {};
+        const scheduleItems = sch?.schedule_items || [];
+        const completedDoses = summary.completed_count ?? records.length;
+        const totalDoses = summary.total_doses ?? (completedDoses > 0 ? completedDoses : 10);
+        const progress = summary.completion_percentage ?? (totalDoses > 0 ? Math.round((completedDoses / totalDoses) * 100) : 0);
+        const overdueCount = summary.overdue_count ?? 0;
+        const upcomingCount = summary.upcoming_count ?? 0;
+        const needsAttention = overdueCount > 0;
+
+        let nextVaccine = {
+          name: 'All Scheduled Doses Complete',
+          dueDate: 'Up to Date',
+          relative: 'Up to Date',
+          status: 'COMPLETED',
+          clinic: m.notes || 'Lilavati Hospital & Research Centre',
+          category: 'Routine',
+          notes: 'All national immunization schedule requirements are currently satisfied.',
+        };
+
+        const nextPending = scheduleItems.find((i) => i.status === 'OVERDUE' || i.status === 'DUE') || scheduleItems.find((i) => i.status === 'UPCOMING');
+        if (nextPending) {
+          const dStr = nextPending.calculated_due_date || nextPending.recommended_date;
+          const dObj = new Date(dStr);
+          nextVaccine = {
+            name: nextPending.vaccine_name || nextPending.vaccine_code,
+            dueDate: isNaN(dObj.getTime()) ? dStr : dObj.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+            relative: nextPending.status === 'OVERDUE' ? 'Overdue' : 'Upcoming',
+            status: nextPending.status,
+            clinic: m.notes || 'Lilavati Hospital & Research Centre',
+            category: nextPending.category || 'Routine UIP',
+            notes: nextPending.notes || nextPending.catch_up_notes || 'National Immunization Schedule guideline.',
+          };
+        }
+
+        const mappedMember = {
+          id: m.id,
+          name: m.full_name,
+          relationship: m.relationship === 'CHILD' ? 'Child' : (m.relationship ? m.relationship.charAt(0) + m.relationship.slice(1).toLowerCase() : 'Dependent'),
+          age: `${ageYears} year${ageYears === 1 ? '' : 's'}`,
+          dob: m.date_of_birth,
+          gender: m.gender ? m.gender.charAt(0) + m.gender.slice(1).toLowerCase() : 'Other',
+          bloodGroup: m.blood_group || 'Unknown',
+          isChild,
+          phone: '',
+          email: '',
+          allergies: Array.isArray(m.allergies) ? m.allergies.join(', ') : (m.allergies || 'No known allergies reported'),
+          primaryClinic: m.notes || 'Lilavati Hospital & Research Centre',
+          pediatrician: isChild ? 'Dr. Sunita Sharma' : 'General Practitioner',
+          avatarFallback: initials,
+          avatarBg: isChild
+            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+            : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+          progress,
+          completedDoses,
+          totalDoses,
+          upcomingCount,
+          overdueCount,
+          status: overdueCount > 0 ? 'OVERDUE' : (progress === 100 ? 'COMPLETED' : 'UPCOMING'),
+          statusLabel: overdueCount > 0 ? `${overdueCount} Overdue` : (progress === 100 ? 'All Up to Date' : 'Active Schedule'),
+          statusVariant: overdueCount > 0 ? 'overdue' : (progress === 100 ? 'success' : 'secondary'),
+          needsAttention,
+          attentionReason: overdueCount > 0 ? `${overdueCount} overdue vaccination milestone${overdueCount > 1 ? 's' : ''}` : null,
+          nextVaccine,
+          vaccinationHistory: records.map((r, rIdx) => ({
+            id: r.id || `rec-${rIdx}`,
+            vaccineName: r.vaccine_name || r.vaccine_code,
+            dose: r.dose_name || `Dose ${r.dose_number}`,
+            dateAdministered: r.administered_date,
+            clinic: r.healthcare_provider || 'Lilavati Hospital & Research Centre',
+            administeredBy: r.administered_by || 'Staff Practitioner',
+            batchNumber: r.batch_number || 'N/A',
+            site: 'Left Deltoid',
+            status: 'COMPLETED',
+          })),
+          upcomingSchedule: scheduleItems.filter((i) => i.status !== 'COMPLETED').map((item, itemIdx) => {
+            const dateStr = item.calculated_due_date || item.recommended_date;
+            return {
+              id: `sch-${itemIdx}`,
+              vaccineName: item.vaccine_name || item.vaccine_code,
+              targetAge: item.recommended_age_display || 'Routine',
+              dueDate: dateStr,
+              status: item.status,
+              timeElapsed: item.status === 'OVERDUE' ? 'Overdue' : 'Scheduled',
+              description: item.notes || item.catch_up_notes || 'National Immunization Schedule.',
+            };
+          }),
+          activityLog: [
+            {
+              id: `act-${m.id}-1`,
+              title: 'Immunization profile active',
+              date: 'Current',
+              description: 'Profile linked to verified digital registry.',
+              type: 'profile',
+            },
+          ],
+        };
+
+        setMember(mappedMember);
+        setEditFormData({ ...mappedMember });
+        setRecordDoseData((prev) => ({
+          ...prev,
+          vaccineName: mappedMember.nextVaccine?.name || 'DPT Booster',
+          clinic: mappedMember.primaryClinic,
+        }));
+        setViewState('normal');
+      } catch (err) {
+        console.error('Failed to load member detail in live mode:', err);
+        if (isMounted) setViewState('error');
+      }
+    };
+
+    fetchLiveMember();
+    return () => {
+      isMounted = false;
+    };
+  }, [id, isDemoMode, demoStore.familyMembers]);
 
   const validateEditForm = (data) => {
     const errors = {};
@@ -120,7 +288,7 @@ export default function FamilyMemberDetailPage() {
     return errors;
   };
 
-  const handleEditSubmit = (e) => {
+  const handleEditSubmit = async (e) => {
     e.preventDefault();
     const errors = validateEditForm(editFormData);
     if (Object.keys(errors).length > 0) {
@@ -128,13 +296,35 @@ export default function FamilyMemberDetailPage() {
       return;
     }
 
-    setMember({ ...editFormData });
-    setIsEditModalOpen(false);
-    setSuccessToast(`Updated profile details for ${editFormData.name}.`);
-    setTimeout(() => setSuccessToast(null), 3500);
+    if (isDemoMode) {
+      updateDemoMember(id, editFormData);
+      setMember({ ...editFormData });
+      setIsEditModalOpen(false);
+      setSuccessToast(`Updated profile details for ${editFormData.name}.`);
+      setTimeout(() => setSuccessToast(null), 3500);
+      return;
+    }
+
+    // Live mode API update
+    try {
+      await familyApi.updateMember(id, {
+        full_name: editFormData.name,
+        date_of_birth: editFormData.dob,
+        blood_group: editFormData.bloodGroup,
+        allergies: editFormData.allergies ? editFormData.allergies.split(',').map((s) => s.trim()) : [],
+        notes: editFormData.primaryClinic,
+      });
+      setMember((prev) => ({ ...prev, ...editFormData }));
+      setIsEditModalOpen(false);
+      setSuccessToast(`Updated profile details for ${editFormData.name}.`);
+      setTimeout(() => setSuccessToast(null), 3500);
+    } catch (err) {
+      console.error('Failed to update member in live mode:', err);
+      setFormErrors({ submit: err.message || 'Failed to update member profile.' });
+    }
   };
 
-  const handleRecordDoseSubmit = (e) => {
+  const handleRecordDoseSubmit = async (e) => {
     e.preventDefault();
     const newRecord = {
       id: `hist-${Date.now()}`,
@@ -148,31 +338,66 @@ export default function FamilyMemberDetailPage() {
       status: 'COMPLETED',
     };
 
-    setMember((prev) => ({
-      ...prev,
-      completedDoses: prev.completedDoses + 1,
-      progress: Math.min(100, Math.round(((prev.completedDoses + 1) / prev.totalDoses) * 100)),
-      vaccinationHistory: [newRecord, ...(prev.vaccinationHistory || [])],
-      activityLog: [
-        {
-          id: `act-${Date.now()}`,
-          title: `${recordDoseData.vaccineName} recorded`,
-          date: 'Just now',
-          description: `Administered at ${recordDoseData.clinic}. Batch ${recordDoseData.batch}.`,
-          type: 'record',
-        },
-        ...(prev.activityLog || []),
-      ],
-      needsAttention: false,
-    }));
+    if (isDemoMode) {
+      setMember((prev) => ({
+        ...prev,
+        completedDoses: (prev?.completedDoses || 0) + 1,
+        progress: Math.min(100, Math.round((((prev?.completedDoses || 0) + 1) / (prev?.totalDoses || 1)) * 100)),
+        vaccinationHistory: [newRecord, ...(prev?.vaccinationHistory || [])],
+        activityLog: [
+          {
+            id: `act-${Date.now()}`,
+            title: `${recordDoseData.vaccineName} recorded`,
+            date: 'Just now',
+            description: `Administered at ${recordDoseData.clinic}. Batch ${recordDoseData.batch}.`,
+            type: 'record',
+          },
+          ...(prev?.activityLog || []),
+        ],
+        needsAttention: false,
+      }));
+      setIsRecordModalOpen(false);
+      setSuccessToast(`Logged dose of ${recordDoseData.vaccineName} for ${member?.name}.`);
+      setTimeout(() => setSuccessToast(null), 4000);
+      return;
+    }
 
-    setIsRecordModalOpen(false);
-    setSuccessToast(`Logged dose of ${recordDoseData.vaccineName} for ${member.name}.`);
-    setTimeout(() => setSuccessToast(null), 4000);
+    // Live mode API record
+    try {
+      await vaccinationApi.addRecord(id, {
+        vaccine_code: recordDoseData.vaccineName.split(' ')[0].toUpperCase(),
+        vaccine_name: recordDoseData.vaccineName,
+        administered_date: recordDoseData.date,
+        administered_by: 'Staff Practitioner',
+        healthcare_provider: recordDoseData.clinic,
+        batch_number: recordDoseData.batch,
+        vaccination_status: 'COMPLETED',
+      });
+      setMember((prev) => ({
+        ...prev,
+        completedDoses: (prev?.completedDoses || 0) + 1,
+        vaccinationHistory: [newRecord, ...(prev?.vaccinationHistory || [])],
+      }));
+      setIsRecordModalOpen(false);
+      setSuccessToast(`Logged dose of ${recordDoseData.vaccineName} for ${member?.name}.`);
+      setTimeout(() => setSuccessToast(null), 4000);
+    } catch (err) {
+      console.error('Failed to record dose in live mode:', err);
+      setSuccessToast(`Error: ${err.message || 'Could not record dose'}`);
+    }
   };
 
-  const handleDeleteMember = () => {
+  const handleDeleteMember = async () => {
     setIsDeleteAlertOpen(false);
+    if (isDemoMode) {
+      deleteDemoMember(id);
+    } else {
+      try {
+        await familyApi.deleteMember(id);
+      } catch (err) {
+        console.error('Failed to delete member in live mode:', err);
+      }
+    }
     navigate('/family', { replace: true });
   };
 
@@ -245,6 +470,10 @@ export default function FamilyMemberDetailPage() {
         />
       </div>
     );
+  }
+
+  if (!member) {
+    return null;
   }
 
   return (

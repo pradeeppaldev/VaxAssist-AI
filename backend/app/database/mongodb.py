@@ -15,9 +15,21 @@ class MongoDBManager:
         """Initialize MongoDB connection pool with short timeout for health checking."""
         try:
             logger.info(f"Connecting to MongoDB at: {settings.MONGODB_URI} (db: {settings.MONGODB_DB_NAME})")
+            client_kwargs = {
+                "serverSelectionTimeoutMS": settings.MONGODB_SERVER_SELECTION_TIMEOUT_MS,
+            }
+            try:
+                import certifi
+                ca_file = certifi.where()
+                uri_lower = settings.MONGODB_URI.lower()
+                if "mongodb+srv://" in uri_lower or "ssl=true" in uri_lower or "tls=true" in uri_lower:
+                    client_kwargs["tlsCAFile"] = ca_file
+            except Exception as cert_err:
+                logger.debug(f"Could not load certifi CA bundle: {cert_err}")
+
             self.client = AsyncIOMotorClient(
                 settings.MONGODB_URI,
-                serverSelectionTimeoutMS=settings.MONGODB_SERVER_SELECTION_TIMEOUT_MS,
+                **client_kwargs,
             )
             self.db = self.client[settings.MONGODB_DB_NAME]
             # Quick non-blocking ping check

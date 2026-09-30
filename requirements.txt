@@ -1,0 +1,3 @@
+# VaxAssist AI - Root Requirements
+# References backend requirements for root-level deployment environments
+-r backend/requirements.txt

@@ -34,6 +34,7 @@ import {
   PopoverTrigger 
 } from '@/components/ui/popover';
 import ThemeToggle from '@/components/common/ThemeToggle';
+import ModeToggle from '@/components/common/ModeToggle';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { useAuth } from '@/context/AuthContext';
 import { useHealthCheck } from '@/hooks/useHealthCheck';
@@ -299,6 +300,9 @@ export function AppHeader({ onToggleMobileMenu }) {
               </div>
             </PopoverContent>
           </Popover>
+
+          {/* Demo / Live Mode Selector */}
+          <ModeToggle />
 
           {/* Theme Toggle (Light / Dark) */}
           <ThemeToggle />

@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '@/context/AuthContext';
+import { useDemoMode } from '@/context/DemoModeContext';
 import { formatDate } from '@/lib/utils';
 import { familyApi, vaccinationApi, notificationApi, agentApi } from '@/services/api';
 
@@ -342,6 +343,7 @@ const AI_SUGGESTION_PROMPTS = [
 
 export default function PatientDashboard() {
   const { user } = useAuth();
+  const { isDemoMode, setDemoMode, demoStore } = useDemoMode();
   const navigate = useNavigate();
 
   // View state switcher: 'normal' | 'loading' | 'empty' | 'error'
@@ -350,27 +352,136 @@ export default function PatientDashboard() {
   // Real Backend Data State
   const [realMembers, setRealMembers] = useState([]);
   const [realNotifs, setRealNotifs] = useState([]);
+  const [realAttentionItems, setRealAttentionItems] = useState([]);
+  const [realUpcomingVaccinations, setRealUpcomingVaccinations] = useState([]);
+  const [isLoadingLive, setIsLoadingLive] = useState(true);
   const [isSubmittingRecord, setIsSubmittingRecord] = useState(false);
   const [dashboardNotice, setDashboardNotice] = useState(null);
 
   // Load real family members and notifications from backend
   const loadDashboardData = React.useCallback(async () => {
+    if (isDemoMode) {
+      setIsLoadingLive(false);
+      return;
+    }
+    setIsLoadingLive(true);
     try {
       const [membersRes, notifsRes] = await Promise.allSettled([
         familyApi.getMembers(),
         notificationApi.getNotifications({ limit: 5 }),
       ]);
 
-      if (membersRes.status === 'fulfilled' && membersRes.value?.data && membersRes.value.data.length > 0) {
+      if (membersRes.status === 'fulfilled' && membersRes.value?.data) {
         const colors = [
           'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
           'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
           'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
           'bg-primary/10 text-primary border-primary/20',
         ];
-        const mapped = membersRes.value.data.map((m, idx) => {
+        const rawMembers = membersRes.value.data;
+        const allAttn = [];
+        const allUpcoming = [];
+
+        // Fetch schedule for all members in parallel
+        const schResults = await Promise.allSettled(
+          rawMembers.map((m) => vaccinationApi.getMemberSchedule(m.id))
+        );
+
+        const mapped = rawMembers.map((m, idx) => {
           const birthYear = m.date_of_birth ? new Date(m.date_of_birth).getFullYear() : 2020;
           const ageYears = Math.max(0, new Date().getFullYear() - birthYear);
+
+          let progress = 100;
+          let completedDoses = 0;
+          let totalDoses = 0;
+          let upcomingCount = 0;
+          let overdueCount = 0;
+          let status = 'UPCOMING';
+          let statusLabel = 'On Track';
+          let statusVariant = 'success';
+          let nextVaccine = {
+            name: 'All Scheduled Vaccines Complete',
+            due: 'Up to Date',
+            relative: 'Verified',
+            status: 'COMPLETED',
+          };
+
+          const schRes = schResults[idx];
+          if (schRes.status === 'fulfilled' && schRes.value?.data) {
+            const sch = schRes.value.data;
+            const summary = sch.summary || {};
+            const items = sch.schedule_items || sch.items || [];
+
+            progress = Math.round(summary.completion_percentage || 0);
+            completedDoses = summary.completed_count || 0;
+            totalDoses = summary.total_doses || 0;
+            upcomingCount = summary.upcoming_count || 0;
+            overdueCount = summary.overdue_count || 0;
+
+            const overdueList = items.filter((it) => it.status === 'OVERDUE');
+            const dueList = items.filter((it) => it.status === 'DUE');
+            const upcomingList = items.filter((it) => it.status === 'UPCOMING');
+
+            if (overdueCount > 0) {
+              status = 'OVERDUE';
+              statusLabel = `${overdueCount} Overdue`;
+              statusVariant = 'overdue';
+            } else if (summary.due_count > 0) {
+              status = 'DUE';
+              statusLabel = `${summary.due_count} Due Today`;
+              statusVariant = 'due';
+            } else if (upcomingCount > 0) {
+              status = 'UPCOMING';
+              statusLabel = `${upcomingCount} Upcoming`;
+              statusVariant = 'secondary';
+            }
+
+            const priorityDose = overdueList[0] || dueList[0] || upcomingList[0];
+            if (priorityDose) {
+              nextVaccine = {
+                name: priorityDose.vaccine_name || priorityDose.code || 'Vaccine',
+                due: priorityDose.calculated_due_date || 'Scheduled',
+                relative: priorityDose.status === 'OVERDUE' ? `${priorityDose.days_overdue || ''} days overdue` : 'Scheduled',
+                status: priorityDose.status,
+              };
+            }
+
+            // Collect attention items
+            [...overdueList, ...dueList].forEach((it, itIdx) => {
+              allAttn.push({
+                id: `attn-${m.id}-${itIdx}`,
+                memberId: m.id,
+                memberName: m.full_name,
+                relationship: m.relationship || 'Dependent',
+                vaccineName: it.vaccine_name || it.code,
+                status: it.status,
+                dueDate: it.calculated_due_date,
+                timeElapsed: it.status === 'OVERDUE' ? `${it.days_overdue || ''} days overdue` : 'Due today',
+                description: it.status_reason || it.notes || 'Timely administration ensures protection under UIP guidelines.',
+                actionPrimary: 'Schedule Catch-Up',
+                actionSecondary: 'Record Dose',
+                clinicHint: m.notes || 'Community Health Center',
+              });
+            });
+
+            // Collect upcoming vaccinations
+            upcomingList.forEach((it, itIdx) => {
+              allUpcoming.push({
+                id: `up-${m.id}-${itIdx}`,
+                memberId: m.id,
+                memberName: m.full_name,
+                memberAge: `${ageYears} yrs`,
+                vaccineName: it.vaccine_name || it.code,
+                doseNumber: it.dose_name || `Dose ${it.dose_number || 1}`,
+                dueDate: it.calculated_due_date,
+                relativeTime: 'Upcoming',
+                status: 'UPCOMING',
+                clinic: m.notes || 'Community Health Center',
+                category: it.category || 'Routine UIP',
+              });
+            });
+          }
+
           return {
             id: m.id,
             name: m.full_name,
@@ -381,47 +492,161 @@ export default function PatientDashboard() {
             bloodGroup: m.blood_group || 'O+',
             avatarFallback: (m.full_name || 'FM').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
             avatarBg: colors[idx % colors.length],
-            progress: 88,
-            completedDoses: 8,
-            totalDoses: 9,
-            status: 'UPCOMING',
-            statusLabel: 'On Track',
-            statusVariant: 'success',
-            nextVaccine: {
-              name: 'Scheduled Milestone',
-              due: 'On Schedule',
-              relative: 'Verified',
-              status: 'UPCOMING',
-            },
+            progress,
+            completedDoses,
+            totalDoses,
+            overdueCount,
+            upcomingCount,
+            status,
+            statusLabel,
+            statusVariant,
+            nextVaccine,
             raw: m,
           };
         });
+
         setRealMembers(mapped);
+        setRealAttentionItems(allAttn);
+        allUpcoming.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+        setRealUpcomingVaccinations(allUpcoming);
+      } else {
+        setRealMembers([]);
+        setRealAttentionItems([]);
+        setRealUpcomingVaccinations([]);
       }
 
-      if (notifsRes.status === 'fulfilled' && notifsRes.value?.data && notifsRes.value.data.length > 0) {
+      if (notifsRes.status === 'fulfilled' && notifsRes.value?.data) {
         setRealNotifs(notifsRes.value.data);
+      } else {
+        setRealNotifs([]);
       }
     } catch (err) {
       console.warn('Dashboard live data fetch notice:', err);
+    } finally {
+      setIsLoadingLive(false);
     }
-  }, []);
+  }, [isDemoMode]);
 
   React.useEffect(() => {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  const activeFamilyMembers = realMembers.length > 0 ? realMembers : FAMILY_MEMBERS;
-  const activeReminders = realNotifs.length > 0
-    ? realNotifs.map((n, idx) => ({
-        id: n.id || `notif-${idx}`,
+  const activeFamilyMembers = isDemoMode
+    ? (demoStore.familyMembers || [])
+    : realMembers;
+
+  const demoAttentionItems = React.useMemo(() => [
+    {
+      id: 'att-1',
+      memberId: 'fam-1',
+      memberName: 'Aarav Sharma',
+      relationship: 'Son (6 yrs)',
+      vaccineName: 'DPT Booster 2 (Age 5-6 Years)',
+      status: 'OVERDUE',
+      dueDate: '10 Jul 2026',
+      timeElapsed: 'Overdue by 2 months',
+      description: 'Recommended under Universal Immunization Programme (UIP). Critical for herd immunity against diphtheria, pertussis, and tetanus.',
+      actionPrimary: 'Schedule Catch-Up',
+      actionSecondary: 'Record Dose',
+      clinicHint: 'Lilavati Hospital & Research Centre',
+    },
+    {
+      id: 'att-2',
+      memberId: 'fam-2',
+      memberName: 'Ananya Sharma',
+      relationship: 'Daughter (15 wks)',
+      vaccineName: 'Pentavalent 3, OPV 3 & Rota 3',
+      status: 'OVERDUE',
+      dueDate: '18 Sep 2026',
+      timeElapsed: '13 days overdue',
+      description: '14-week milestone vaccines protecting against DTP, Hepatitis B, Hib, Poliovirus, and Rotaviral diarrhea. Safe to co-administer immediately.',
+      actionPrimary: 'Schedule Catch-Up',
+      actionSecondary: 'Record Dose',
+      clinicHint: 'Bandra Urban Primary Health Center',
+    },
+  ], []);
+
+  const demoUpcomingVaccinations = React.useMemo(() => [
+    {
+      id: 'vax-1',
+      memberId: 'fam-4',
+      memberName: 'Rajesh Sharma',
+      memberAge: '35 yrs',
+      vaccineName: 'Annual Seasonal Influenza (Quadrivalent)',
+      doseNumber: '2026-2027 Season',
+      dueDate: '15 Nov 2026',
+      relativeTime: 'Due in 6 weeks',
+      status: 'UPCOMING',
+      clinic: 'City Health Diagnostic Center',
+      category: 'Seasonal Adult Vaccine',
+    },
+    {
+      id: 'vax-2',
+      memberId: 'fam-2',
+      memberName: 'Ananya Sharma',
+      memberAge: '15 wks',
+      vaccineName: 'Measles-Rubella (MR - Dose 1)',
+      doseNumber: 'Dose 1 (9-12 Months)',
+      dueDate: '12 Mar 2027',
+      relativeTime: 'In 5 months',
+      status: 'UPCOMING',
+      clinic: 'Bandra Urban Primary Health Center',
+      category: 'UIP Primary',
+    },
+    {
+      id: 'vax-3',
+      memberId: 'fam-3',
+      memberName: 'Pooja Sharma',
+      memberAge: '32 yrs',
+      vaccineName: 'Tetanus-Diphtheria (Td) 10-Yr Booster',
+      doseNumber: 'Decennial Check',
+      dueDate: '20 Aug 2028',
+      relativeTime: 'In 2 years',
+      status: 'UPCOMING',
+      clinic: 'Bandra Community Hospital',
+      category: 'Adult Routine',
+    },
+    {
+      id: 'vax-4',
+      memberId: 'fam-1',
+      memberName: 'Aarav Sharma',
+      memberAge: '6 yrs',
+      vaccineName: 'Tetanus & adult Diphtheria (Td 10Y)',
+      doseNumber: '10-Year Dose',
+      dueDate: '08 Jul 2030',
+      relativeTime: 'In 3.5 years',
+      status: 'UPCOMING',
+      clinic: 'Lilavati Hospital & Research Centre',
+      category: 'Adolescent Routine',
+    },
+  ], []);
+
+  const activeAttentionItems = isDemoMode ? demoAttentionItems : realAttentionItems;
+  const activeUpcomingVaccinations = isDemoMode ? demoUpcomingVaccinations : realUpcomingVaccinations;
+
+  const totalCompletedDoses = activeFamilyMembers.reduce((acc, m) => acc + (m.completedDoses || 0), 0);
+  const totalTargetDoses = activeFamilyMembers.reduce((acc, m) => acc + (m.totalDoses || 0), 0);
+  const overallCompliance = totalTargetDoses > 0 ? Math.round((totalCompletedDoses / totalTargetDoses) * 100) : 100;
+  const totalUpcomingDoses = activeFamilyMembers.reduce((acc, m) => acc + (m.upcomingCount || 0), 0);
+  const totalOverdueDoses = activeAttentionItems.filter((it) => it.status === 'OVERDUE').length;
+
+  const activeReminders = isDemoMode
+    ? (demoStore.notifications || []).map((n) => ({
+        id: n.id,
         title: n.title || n.message,
         targetDate: n.scheduled_for ? new Date(n.scheduled_for).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Active Schedule Alert',
         channel: n.channel || 'In-App & Email',
         badge: n.notification_type === 'OVERDUE' ? 'Immediate Action' : (n.notification_type === 'REMINDER' ? 'Upcoming' : 'Notice'),
         active: true,
       }))
-    : REMINDERS;
+    : realNotifs.map((n, idx) => ({
+        id: n.id || `notif-${idx}`,
+        title: n.title || n.message,
+        targetDate: n.scheduled_for ? new Date(n.scheduled_for).toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Active Schedule Alert',
+        channel: n.channel || 'In-App & Email',
+        badge: n.notification_type === 'OVERDUE' ? 'Immediate Action' : (n.notification_type === 'REMINDER' ? 'Upcoming' : 'Notice'),
+        active: true,
+      }));
 
   // Record Vaccination Modal State
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -797,7 +1022,7 @@ export default function PatientDashboard() {
             className="border-primary/40 bg-primary/10 text-primary font-medium text-xs py-1 px-2.5 gap-1.5"
           >
             <Users className="h-3.5 w-3.5" />
-            Family Account • 4 Members
+            Family Account • {activeFamilyMembers.length} Member{activeFamilyMembers.length === 1 ? '' : 's'}
           </Badge>
         }
         actions={
@@ -823,6 +1048,36 @@ export default function PatientDashboard() {
         }
       />
 
+      {/* Live Mode: Zero Members Onboarding Card */}
+      {!isDemoMode && !isLoadingLive && activeFamilyMembers.length === 0 && (
+        <Card className="p-8 text-center border-dashed border-2 border-primary/30 bg-primary/5">
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+            <Users className="h-6 w-6" />
+          </div>
+          <h3 className="font-bold text-base text-foreground font-sora">No Family Members Registered in Live Mode</h3>
+          <p className="text-xs text-muted-foreground mt-1.5 max-w-md mx-auto leading-relaxed">
+            You are running in Live Mode connected directly to MongoDB Atlas. Add your children, spouse, or dependents to start tracking official Universal Immunization Schedule milestones.
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <Button asChild size="sm" className="text-xs gap-1.5 shadow-xs">
+              <Link to="/family">
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add First Family Member</span>
+              </Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs gap-1.5 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+              onClick={() => setDemoMode(true)}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span>Switch to Demo Mode</span>
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* 2. OVERVIEW METRICS */}
       <section aria-label="Key Family Metrics">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -836,7 +1091,7 @@ export default function PatientDashboard() {
           />
           <MetricCard
             title="Completed Doses"
-            value={(activeFamilyMembers.reduce((acc, m) => acc + (m.completedDoses || 0), 0) || 28).toString()}
+            value={totalCompletedDoses.toString()}
             subtext="Verified immunization history"
             icon={CheckCircle2}
             accentColor="success"
@@ -846,116 +1101,137 @@ export default function PatientDashboard() {
           />
           <MetricCard
             title="Upcoming Doses"
-            value={(activeReminders.filter(r => r.badge === 'Upcoming').length || 3).toString()}
-            subtext="Within the next 30 days"
+            value={totalUpcomingDoses.toString()}
+            subtext="Next scheduled milestones"
             icon={Calendar}
             accentColor="cyan"
-            badgeText="Next 30d"
+            badgeText="Scheduled"
             badgeVariant="secondary"
             onClick={() => navigate('/schedule')}
           />
           <MetricCard
             title="Attention Needed"
-            value={(activeReminders.filter(r => r.badge === 'Immediate Action').length || ATTENTION_ITEMS.length).toString()}
+            value={activeAttentionItems.length.toString()}
             subtext="Actionable alerts & overdue"
             icon={AlertTriangle}
             accentColor="danger"
-            badgeText="Action Req."
-            badgeVariant="destructive"
+            badgeText={activeAttentionItems.length > 0 ? 'Action Req.' : 'All Clear'}
+            badgeVariant={activeAttentionItems.length > 0 ? 'destructive' : 'secondary'}
           />
         </div>
       </section>
 
       {/* 3. PRIORITY / ATTENTION CARD */}
       <section aria-label="Vaccinations Requiring Attention">
-        <Card className="border-status-overdue/40 bg-status-overdue-bg/20 shadow-xs overflow-hidden">
-          <CardHeader className="pb-3 border-b border-status-overdue/20 bg-status-overdue-bg/30">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-status-overdue text-white shrink-0 shadow-xs">
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-                <div>
-                  <CardTitle className="text-base sm:text-lg font-bold text-foreground">
-                    2 Vaccinations Require Your Attention
-                  </CardTitle>
-                  <CardDescription className="text-xs sm:text-sm text-muted-foreground">
-                    Timely administration ensures protection against vaccine-preventable diseases under UIP guidelines.
-                  </CardDescription>
-                </div>
+        {activeAttentionItems.length === 0 ? (
+          <Card className="border-status-completed/40 bg-status-completed-bg/10 shadow-xs p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-status-completed text-white shrink-0 shadow-xs">
+                <CheckCircle2 className="h-5 w-5" />
               </div>
-              <Badge variant="destructive" className="self-start sm:self-auto text-xs px-2.5 py-0.5 font-bold uppercase tracking-wider">
-                Immediate Action
-              </Badge>
+              <div>
+                <h3 className="text-base font-bold text-foreground font-sans">
+                  All Family Vaccinations Up to Date
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  No missed or overdue doses detected for your registered household members under national immunization guidelines.
+                </p>
+              </div>
             </div>
-          </CardHeader>
-
-          <CardContent className="p-4 sm:p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {ATTENTION_ITEMS.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 flex flex-col justify-between space-y-4 transition-all hover:border-primary/40 hover:shadow-xs"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-base text-foreground font-sans">
-                            {item.memberName}
-                          </h4>
-                          <span className="text-xs text-muted-foreground font-medium">
-                            • {item.relationship}
-                          </span>
-                        </div>
-                        <p className="text-sm font-semibold text-primary mt-0.5">
-                          {item.vaccineName}
-                        </p>
-                      </div>
-                      <StatusBadge status={item.status} size="default" />
-                    </div>
-
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className="font-medium text-foreground">
-                        {item.status === 'OVERDUE' ? `Due Date: ${item.dueDate}` : `Due in: ${item.timeElapsed}`}
-                      </span>
-                      <span className="text-status-overdue font-semibold">({item.timeElapsed})</span>
-                    </div>
-
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {item.description}
-                    </p>
-
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground/90 bg-secondary/60 rounded-lg p-2">
-                      <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
-                      <span className="truncate">{item.clinicHint}</span>
-                    </div>
+            <Badge variant="outline" className="self-start sm:self-auto border-status-completed/40 text-status-completed font-semibold">
+              All Clear
+            </Badge>
+          </Card>
+        ) : (
+          <Card className="border-status-overdue/40 bg-status-overdue-bg/20 shadow-xs overflow-hidden">
+            <CardHeader className="pb-3 border-b border-status-overdue/20 bg-status-overdue-bg/30">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-status-overdue text-white shrink-0 shadow-xs">
+                    <AlertTriangle className="h-5 w-5" />
                   </div>
-
-                  <div className="flex items-center gap-2 pt-1 border-t border-border/60">
-                    <Button
-                      size="sm"
-                      className="font-semibold text-xs h-8 flex-1"
-                      onClick={() => navigate('/schedule')}
-                    >
-                      {item.actionPrimary}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs h-8"
-                      onClick={() => handleOpenRecordModal(item.memberId, item.vaccineName)}
-                    >
-                      <Check className="h-3.5 w-3.5 mr-1 text-status-completed" />
-                      Log Dose
-                    </Button>
+                  <div>
+                    <CardTitle className="text-base sm:text-lg font-bold text-foreground">
+                      {activeAttentionItems.length} Vaccination{activeAttentionItems.length === 1 ? '' : 's'} Require Your Attention
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm text-muted-foreground">
+                      Timely administration ensures protection against vaccine-preventable diseases under UIP guidelines.
+                    </CardDescription>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+                <Badge variant="destructive" className="self-start sm:self-auto text-xs px-2.5 py-0.5 font-bold uppercase tracking-wider">
+                  Immediate Action
+                </Badge>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {activeAttentionItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-border/80 bg-card p-4 sm:p-5 flex flex-col justify-between space-y-4 transition-all hover:border-primary/40 hover:shadow-xs"
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-base text-foreground font-sans">
+                              {item.memberName}
+                            </h4>
+                            <span className="text-xs text-muted-foreground font-medium">
+                              • {item.relationship}
+                            </span>
+                          </div>
+                          <p className="text-sm font-semibold text-primary mt-0.5">
+                            {item.vaccineName}
+                          </p>
+                        </div>
+                        <StatusBadge status={item.status} size="default" />
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="font-medium text-foreground">
+                          {item.status === 'OVERDUE' ? `Due Date: ${item.dueDate}` : `Due in: ${item.timeElapsed}`}
+                        </span>
+                        <span className="text-status-overdue font-semibold">({item.timeElapsed})</span>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {item.description}
+                      </p>
+
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground/90 bg-secondary/60 rounded-lg p-2">
+                        <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span className="truncate">{item.clinicHint}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1 border-t border-border/60">
+                      <Button
+                        size="sm"
+                        className="font-semibold text-xs h-8 flex-1"
+                        onClick={() => navigate('/schedule')}
+                      >
+                        {item.actionPrimary}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-8"
+                        onClick={() => handleOpenRecordModal(item.memberId, item.vaccineName)}
+                      >
+                        <Check className="h-3.5 w-3.5 mr-1 text-status-completed" />
+                        Log Dose
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </section>
 
       {/* 4. FAMILY OVERVIEW SECTION */}
@@ -971,14 +1247,14 @@ export default function PatientDashboard() {
           </div>
           <Button variant="ghost" size="sm" asChild className="gap-1 text-primary hover:text-primary font-semibold text-xs sm:text-sm">
             <Link to="/family">
-              <span>View All Members (4)</span>
+              <span>View All Members ({activeFamilyMembers.length})</span>
               <ChevronRight className="h-4 w-4" />
             </Link>
           </Button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {FAMILY_MEMBERS.map((member) => (
+          {activeFamilyMembers.map((member) => (
             <Card
               key={member.id}
               className="transition-all duration-200 hover:border-primary/40 hover:shadow-xs flex flex-col justify-between"
@@ -1020,13 +1296,13 @@ export default function PatientDashboard() {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground font-medium">Next Dose:</span>
-                    <StatusBadge status={member.nextVaccine.status} size="sm" />
+                    <StatusBadge status={member.nextVaccine?.status || 'UPCOMING'} size="sm" />
                   </div>
                   <p className="text-xs font-semibold text-foreground truncate">
-                    {member.nextVaccine.name}
+                    {member.nextVaccine?.name || 'On Schedule'}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    {member.nextVaccine.relative}
+                    {member.nextVaccine?.relative || member.nextVaccine?.due || 'Verified'}
                   </p>
                 </div>
               </CardContent>
@@ -1058,18 +1334,18 @@ export default function PatientDashboard() {
               <div className="lg:col-span-4 flex items-center gap-5 sm:border-r border-border/60 pr-0 lg:pr-6">
                 <div className="relative flex items-center justify-center h-24 w-24 rounded-full border-4 border-primary/20 bg-primary/5 shrink-0">
                   <span className="text-2xl sm:text-3xl font-extrabold text-primary font-sans">
-                    82%
+                    {overallCompliance}%
                   </span>
                 </div>
                 <div className="space-y-1">
                   <Badge variant="outline" className="text-xs border-status-completed/40 bg-status-completed-bg text-status-completed-fg">
-                    On Track • High Coverage
+                    {overallCompliance >= 80 ? 'On Track • High Coverage' : 'Catch-Up Needed'}
                   </Badge>
                   <h3 className="text-base font-bold text-foreground">
                     Family Immunization Index
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    28 of 34 total family vaccine milestones safely recorded
+                    {totalCompletedDoses} of {totalTargetDoses} total family vaccine milestones safely recorded
                   </p>
                 </div>
               </div>
@@ -1082,7 +1358,7 @@ export default function PatientDashboard() {
                       Completed
                     </p>
                     <p className="text-xl font-bold text-status-completed mt-0.5 font-sans">
-                      28 doses
+                      {totalCompletedDoses} doses
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-secondary/60 border border-border/50">
@@ -1090,7 +1366,7 @@ export default function PatientDashboard() {
                       Upcoming
                     </p>
                     <p className="text-xl font-bold text-primary mt-0.5 font-sans">
-                      3 doses
+                      {totalUpcomingDoses} doses
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-secondary/60 border border-border/50">
@@ -1098,7 +1374,7 @@ export default function PatientDashboard() {
                       Overdue
                     </p>
                     <p className="text-xl font-bold text-status-overdue mt-0.5 font-sans">
-                      1 dose
+                      {totalOverdueDoses} dose{totalOverdueDoses === 1 ? '' : 's'}
                     </p>
                   </div>
                   <div className="p-3 rounded-xl bg-secondary/60 border border-border/50">
@@ -1106,7 +1382,7 @@ export default function PatientDashboard() {
                       Catch-up Plan
                     </p>
                     <p className="text-xl font-bold text-status-catchup mt-0.5 font-sans">
-                      Active
+                      {totalOverdueDoses > 0 ? 'Active' : 'All Clear'}
                     </p>
                   </div>
                 </div>
@@ -1146,7 +1422,7 @@ export default function PatientDashboard() {
 
           <Card className="border border-border/80 overflow-hidden">
             <div className="divide-y divide-border/60">
-              {UPCOMING_VACCINATIONS.map((vax) => (
+              {activeUpcomingVaccinations.map((vax) => (
                 <div
                   key={vax.id}
                   className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors hover:bg-muted/30"
@@ -1198,7 +1474,7 @@ export default function PatientDashboard() {
             </div>
 
             <CardFooter className="p-3 bg-muted/20 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Showing 4 immediate priority and upcoming immunization appointments</span>
+              <span>Showing {activeUpcomingVaccinations.length} upcoming immunization appointment{activeUpcomingVaccinations.length === 1 ? '' : 's'}</span>
               <Button variant="link" size="sm" asChild className="text-xs h-auto p-0 font-semibold text-primary">
                 <Link to="/schedule">Open Calendar View →</Link>
               </Button>

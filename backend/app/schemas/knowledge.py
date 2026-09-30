@@ -9,7 +9,9 @@ class KnowledgeDocumentResponse(BaseModel):
     title: str
     description: Optional[str] = None
     original_filename: str
+    stored_filename: Optional[str] = None
     file_size_bytes: int = 0
+    file_hash: Optional[str] = None
     mime_type: str = "application/pdf"
     document_type: str
     source_authority: str
@@ -18,12 +20,22 @@ class KnowledgeDocumentResponse(BaseModel):
     uploaded_by: str
     status: str
     error_message: Optional[str] = None
+    last_indexing_error: Optional[str] = None
     chunk_count: int = 0
     index_version: int = 1
     chroma_collection_name: str = "vaxassist_knowledge"
+    embedding_model: str = "models/gemini-embedding-2"
+    embedding_dimensions: int = 3072
+    tags: List[str] = Field(default_factory=list)
     indexed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
+    job_id: Optional[str] = None
+
+
+class DocumentUploadResponse(BaseModel):
+    document: KnowledgeDocumentResponse
+    job_id: str
 
 
 class KnowledgeDocumentUpdateRequest(BaseModel):
@@ -33,14 +45,43 @@ class KnowledgeDocumentUpdateRequest(BaseModel):
     source_authority: Optional[SourceAuthority] = None
     source_url: Optional[str] = Field(default=None, max_length=500)
     publication_date: Optional[date] = None
+    tags: Optional[List[str]] = None
+
+
+class IngestionJobResponse(BaseModel):
+    job_id: str
+    document_id: str
+    stage: str
+    stage_description: str
+    progress_percent: int = 0
+    total_chunks: int = 0
+    total_batches: int = 0
+    completed_batches: int = 0
+    current_batch: int = 0
+    elapsed_seconds: float = 0.0
+    status: str
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReindexCollectionResponse(BaseModel):
+    total_documents: int = 0
+    reindexed_count: int = 0
+    failed_count: int = 0
+    skipped_count: int = 0
+    elapsed_seconds: float = 0.0
+    details: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class KnowledgeDocumentStatusResponse(BaseModel):
     id: str
     title: str
     status: str
-    chunk_count: int
-    index_version: int
+    stage: Optional[str] = None
+    progress_percent: Optional[int] = None
+    chunk_count: int = 0
+    index_version: int = 1
     error_message: Optional[str] = None
     indexed_at: Optional[datetime] = None
 

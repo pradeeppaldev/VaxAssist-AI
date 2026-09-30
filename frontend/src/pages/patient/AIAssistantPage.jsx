@@ -1,56 +1,45 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import ThoughtLine from '@/components/ui/ThoughtLine';
 import {
   Sparkles,
   Send,
-  Calendar,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  ShieldCheck,
+  CalendarDays,
   BookOpen,
-  ArrowRight,
-  Plus,
-  Trash2,
-  Layers,
-  Search,
-  Check,
-  X,
-  ExternalLink,
-  HelpCircle,
-  Database,
+  ShieldCheck,
   FileCheck,
-  MessageSquare,
-  Users,
   RotateCcw,
-  FileText,
-  Syringe,
-  Info,
-  ChevronRight,
-  SlidersHorizontal,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  ArrowRight,
   ChevronDown,
-  MapPin,
+  ChevronUp,
+  ExternalLink,
+  FileText,
   WifiOff,
+  Info,
+  X,
+  Bot,
+  User as UserIcon,
+  RefreshCw,
+  HelpCircle,
+  Copy,
+  Check,
+  Cpu,
+  Layers,
 } from 'lucide-react';
 
-// Reliable Design System & Healthcare Primitives
-import { StatusBadge } from '@/components/healthcare/StatusBadge';
-import { ErrorState } from '@/components/common/ErrorState';
+// Contexts & APIs
+import { useAuth } from '@/context/AuthContext';
+import { useDemoMode } from '@/context/DemoModeContext';
 import { knowledgeApi, familyApi, agentApi } from '@/services/api';
 import { useOfflineSync } from '@/services/offlineSync';
 
-// Standard shadcn UI Primitives
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+// UI Primitives
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Progress } from '@/components/ui/progress';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -67,86 +56,200 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
 
-// Centralized Mock Data
+// React Bits Components
+import GhostCursor from '@/components/ui/GhostCursor';
+import ThoughtLine from '@/components/ui/ThoughtLine';
+import LatticeLoader from '@/components/ui/LatticeLoader';
+
+// Mock baseline data for demo mode
 import { INITIAL_FAMILY_MEMBERS } from '@/data/mockFamilyData';
-import {
-  CATEGORIZED_EXPLORATION_PROMPTS,
-  DEFAULT_SOURCES_LIBRARY,
-  INITIAL_CONVERSATION_HISTORY,
-  STRUCTURED_DEMO_EXCHANGES,
-} from '@/data/mockAIData';
+import { DEFAULT_SOURCES_LIBRARY } from '@/data/mockAIData';
 
 /**
- * Self-contained AI Header component (no external dependency)
+ * Normalizes raw LLM markdown artifacts (escaped asterisks, hyphens, broken headers)
+ * without corrupting hyphens in vaccine compound names or date strings.
  */
-function AIHeaderSection({ title, description, badge = "Clinical Intelligence Workspace" }) {
+function normalizeMarkdown(text) {
+  if (!text) return '';
+  let cleaned = text;
+
+  // 1. Unescape escaped asterisks, underscores, and bullet hyphens
+  cleaned = cleaned.replace(/\\\*/g, '*');
+  cleaned = cleaned.replace(/\\_/g, '_');
+  cleaned = cleaned.replace(/(^|\n)\s*\\-\s+/g, '$1- ');
+  cleaned = cleaned.replace(/\\-/g, '-');
+
+  // 2. Normalize malformed headings e.g. **### Heading** or ### **Heading**
+  cleaned = cleaned.replace(/\*\*\s*(#{1,6}\s+[^*]+?)\s*\*\*/g, '$1');
+  cleaned = cleaned.replace(/(#{1,6})\s*\*\*(.+?)\*\*/g, '$1 $2');
+
+  // 3. Normalize advisory markers: e.g. **\*Safe Clinical Advisory:\** -> *Safe Clinical Advisory:*
+  cleaned = cleaned.replace(/[*_\\]+\s*(Safe Clinical Advisory:?)\s*[*_\\]+/gi, '*$1*');
+
+  // 4. Normalize broken bullet/bold combos
+  cleaned = cleaned.replace(/\*{4,}/g, '**');
+
+  return cleaned;
+}
+
+/**
+ * Formatted AI response renderer for clean paragraphs, bullet points, and emphasis
+ */
+function FormattedAIMessage({ content }) {
+  if (!content) return null;
+
+  const normalized = normalizeMarkdown(content);
+  const lines = normalized.split('\n');
+
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2">
-        <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary gap-1 font-mono text-[10px] tracking-wide uppercase px-2 py-0.5">
-          <Sparkles className="h-3 w-3 text-primary animate-pulse" />
-          <span>{badge}</span>
-        </Badge>
-      </div>
-      <h2 className="font-sora text-xl sm:text-2xl font-bold tracking-tight text-foreground">
-        {title}
-      </h2>
-      {description && (
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {description}
-        </p>
-      )}
+    <div className="space-y-3 text-sm leading-relaxed text-foreground">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return <div key={idx} className="h-1" />;
+        }
+
+        // Headers
+        if (trimmed.startsWith('### ')) {
+          return (
+            <h4 key={idx} className="font-bold text-base text-foreground pt-2">
+              <BoldHighlight text={trimmed.replace('### ', '')} />
+            </h4>
+          );
+        }
+        if (trimmed.startsWith('## ')) {
+          return (
+            <h3 key={idx} className="font-bold text-lg text-foreground pt-3 border-b border-border/40 pb-1">
+              <BoldHighlight text={trimmed.replace('## ', '')} />
+            </h3>
+          );
+        }
+
+        // Sub-bullets / Indented lists
+        if (/^\s*[\*\-•]\s/.test(line)) {
+          const isSub = /^\s{2,}[\*\-•]\s/.test(line);
+          const bulletText = line.replace(/^\s*[\*\-•]\s*/, '');
+          return (
+            <div key={idx} className={`flex items-start gap-2 ${isSub ? 'pl-6' : 'pl-2'}`}>
+              <span className={`rounded-full shrink-0 ${isSub ? 'h-1 w-1 bg-muted-foreground/60 mt-2' : 'h-1.5 w-1.5 bg-primary mt-2'}`} />
+              <div className="flex-1 text-foreground/90">
+                <BoldHighlight text={bulletText} />
+              </div>
+            </div>
+          );
+        }
+
+        // Numbered list item
+        if (/^\d+\.\s/.test(trimmed)) {
+          const numMatch = trimmed.match(/^(\d+)\.\s*(.*)/);
+          return (
+            <div key={idx} className="flex items-start gap-2.5 pl-2">
+              <span className="font-mono text-xs font-bold text-primary shrink-0 mt-0.5">
+                {numMatch ? numMatch[1] : '•'}.
+              </span>
+              <div className="flex-1 text-foreground/90">
+                <BoldHighlight text={numMatch ? numMatch[2] : trimmed} />
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <p key={idx} className="text-foreground/90">
+            <BoldHighlight text={trimmed} />
+          </p>
+        );
+      })}
     </div>
   );
 }
 
 /**
- * Self-contained Source Citation Chip (no external dependency)
+ * Helper to parse bold (**text**), italics (*text*), and clean up dangling asterisks
+ * without modifying hyphens in vaccine compound names (e.g. Measles-Rubella, DPT-HepB-Hib).
  */
-function SourceCitationChip({ title, source, page, confidence, onClick }) {
+function BoldHighlight({ text }) {
+  if (!text) return null;
+
+  const boldParts = text.split(/(\*\*[^*]+\*\*)/g);
+
   return (
-    <div
-      onClick={onClick}
-      className="flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-card/90 p-2.5 text-xs transition-colors hover:border-primary/50 hover:bg-primary/[0.02] cursor-pointer group"
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="p-1 rounded-lg bg-primary/10 text-primary shrink-0 group-hover:scale-105 transition-transform">
-          <FileText className="h-3.5 w-3.5" />
-        </div>
-        <div className="min-w-0 truncate">
-          <div className="font-semibold text-foreground truncate group-hover:text-primary transition-colors">{title}</div>
-          <div className="text-[10px] text-muted-foreground truncate">{source} {page ? `• ${page}` : ''}</div>
-        </div>
-      </div>
-      {confidence && (
-        <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
-          {confidence}% Match
-        </Badge>
-      )}
-    </div>
+    <>
+      {boldParts.map((bPart, bIdx) => {
+        if (bPart.startsWith('**') && bPart.endsWith('**')) {
+          return (
+            <strong key={`b-${bIdx}`} className="font-semibold text-foreground">
+              {bPart.slice(2, -2)}
+            </strong>
+          );
+        }
+
+        // Handle single-asterisk italics e.g. *Safe Clinical Advisory:*
+        const italicParts = bPart.split(/(?<!\*)\*([^*]+)\*(?!\*)/g);
+        return (
+          <span key={`nb-${bIdx}`}>
+            {italicParts.map((iPart, iIdx) => {
+              if (iIdx % 2 === 1) {
+                return (
+                  <em key={`i-${bIdx}-${iIdx}`} className="italic text-foreground/90">
+                    {iPart}
+                  </em>
+                );
+              }
+              // Clean up dangling unclosed asterisks if any
+              const clean = iPart.replace(/^\s*\*\s*|\s*\*\s*$/g, ' ');
+              return clean;
+            })}
+          </span>
+        );
+      })}
+    </>
   );
 }
 
 export default function AIAssistantPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { isDemoMode, demoStore } = useDemoMode();
+  const { isOnline } = useOfflineSync();
 
-  // Real Family Members State
+  // Family Members & Context
   const [familyMembers, setFamilyMembers] = useState([]);
   const [selectedMemberId, setSelectedMemberId] = useState('ALL');
 
-  // Load real members
+  // Conversation State
+  const [exchanges, setExchanges] = useState([]);
+  const [inputText, setInputText] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingStage, setThinkingStage] = useState('Reviewing records');
+  const [offlineNotice, setOfflineNotice] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+
+  // Expanded sections state per message (sources & technical details)
+  const [expandedSources, setExpandedSources] = useState({});
+  const [expandedDetails, setExpandedDetails] = useState({});
+
+  // Citation Inspector Modal
+  const [selectedSource, setSelectedSource] = useState(null);
+  const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  const userName = user?.name ? user.name.split(' ')[0] : 'there';
+
+  // Load real members in Live Mode, fallback to demo members in Demo Mode
   useEffect(() => {
     let mounted = true;
-    familyApi.getMembers()
+    if (isDemoMode) {
+      setFamilyMembers(INITIAL_FAMILY_MEMBERS);
+      return;
+    }
+
+    familyApi
+      .getMembers()
       .then((res) => {
         if (mounted && res?.data && res.data.length > 0) {
           const mapped = res.data.map((m) => ({
@@ -156,200 +259,48 @@ export default function AIAssistantPage() {
             age: m.date_of_birth
               ? `${Math.max(0, new Date().getFullYear() - new Date(m.date_of_birth).getFullYear())} yrs`
               : '',
-            progress: 85,
-            completedDoses: 10,
-            totalDoses: 12,
-            raw: m,
           }));
           setFamilyMembers(mapped);
-          setSelectedMemberId(mapped[0]?.id || 'ALL');
+        } else if (mounted) {
+          setFamilyMembers([]);
         }
       })
       .catch((err) => {
         console.warn('Notice loading family members in AI Assistant:', err);
       });
-    return () => { mounted = false; };
-  }, []);
+
+    return () => {
+      mounted = false;
+    };
+  }, [isDemoMode]);
 
   const displayMembers = useMemo(() => {
-    return familyMembers.length > 0 ? familyMembers : INITIAL_FAMILY_MEMBERS;
-  }, [familyMembers]);
+    if (isDemoMode) return demoStore?.familyMembers || INITIAL_FAMILY_MEMBERS;
+    return familyMembers;
+  }, [isDemoMode, demoStore?.familyMembers, familyMembers]);
 
-  // Conversation Exchanges state
-  const [exchanges, setExchanges] = useState(STRUCTURED_DEMO_EXCHANGES);
-  const [inputText, setInputText] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
-  const [thinkingStage, setThinkingStage] = useState('Reviewing records'); // Multi-stage clinical reasoning
-
-  // View state switcher: 'normal' | 'thinking' | 'empty' | 'error'
-  const [viewState, setViewState] = useState('normal');
-  const { isOnline } = useOfflineSync();
-  const [offlineNotice, setOfflineNotice] = useState(null);
-
-  // Source Inspector Modal State
-  const [selectedSource, setSelectedSource] = useState(null);
-  const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
-
-  // Mobile Drawer State
-  const [isMobilePanelOpen, setIsMobilePanelOpen] = useState(false);
-
-  // Active family member with safe fallback
   const activeMember = useMemo(() => {
     if (selectedMemberId === 'ALL') {
       return {
         id: 'ALL',
         name: 'Entire Family',
-        relationship: 'Household Overview',
-        age: `${displayMembers.length} Members`,
-        progress: 82,
-        completedDoses: 28,
-        totalDoses: 34,
-        bloodGroup: 'All Types',
-        needsAttention: true,
-        attentionReason: 'Actionable doses require attention per UIP schedule',
-        nextVaccine: {
-          name: 'Oral Polio Vaccine (OPV Booster)',
-          dueDate: 'Upcoming',
-          status: 'DUE',
-          relative: 'Active Schedule',
-        },
+        relationship: 'Household',
       };
     }
     const found = displayMembers?.find((m) => m.id === selectedMemberId);
-    return found || displayMembers[0] || {
-      id: 'fam-1',
-      name: 'Family Member',
-      relationship: 'Dependent',
-      age: '',
-      progress: 80,
-      completedDoses: 8,
-      totalDoses: 10,
-      nextVaccine: {
-        name: 'Scheduled Vaccine',
-        dueDate: 'Upcoming',
-        status: 'UPCOMING',
-        relative: 'Active Schedule',
-      },
-    };
+    return found || { id: selectedMemberId, name: 'Family Member', relationship: 'Dependent' };
   }, [selectedMemberId, displayMembers]);
 
-  // Run Phase 9 Multi-Agent Orchestrator Workflow
-  const handleRunOrchestratorWorkflow = async (workflowType) => {
-    setIsThinking(true);
-    setThinkingStage(`Invoking Multi-Agent Orchestrator: [${workflowType}]`);
-
-    const activeQuery = (inputText || '').trim() || (
-      workflowType === 'knowledge_inquiry'
-        ? 'What is the recommended National Immunization Schedule in India under UIP?'
-        : undefined
-    );
-
-    try {
-      const resp = await agentApi.runOrchestrator({
-        workflow: workflowType,
-        family_member_id: selectedMemberId !== 'ALL' ? selectedMemberId : undefined,
-        query: activeQuery,
-        include_reminders: workflowType !== 'knowledge_inquiry',
-        include_recommendations: workflowType !== 'knowledge_inquiry',
-        include_report: workflowType === 'comprehensive_record' || workflowType === 'routine_cycle',
-        report_output_format: 'json',
-        dry_run: true,
-      });
-
-      if (resp?.data) {
-        const orch = resp.data;
-        const stepList = (orch.steps_executed || []).join(' → ') || 'No steps executed';
-        const exchangeData = {
-          id: `orch-${Date.now()}`,
-          query: activeQuery ? `[${workflowType.replace(/_/g, ' ').toUpperCase()}] ${activeQuery}` : `Multi-Agent Orchestrator: Run ${workflowType.replace(/_/g, ' ').toUpperCase()}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          recipient: activeMember.name,
-          relation: activeMember.relationship,
-          title: `Orchestrator Workflow: ${workflowType.replace(/_/g, ' ').toUpperCase()}`,
-          milestone: {
-            vaccine: `Workflow Status: ${orch.workflow_status}`,
-            dose: `Steps: ${stepList}`,
-            date: 'Multi-Agent Ecosystem',
-            status: orch.workflow_status === 'SUCCESS' ? 'COMPLETED' : 'UPCOMING',
-            countdown: `Actionable: ${orch.actionable_events_count || 0}`,
-            clinic: 'Autonomous Agents',
-          },
-          whyItMatters: orch.summary || `Execution finished across ${orch.steps_executed?.length || 0} agents (${stepList}).`,
-          clinicalPoints: [
-            orch.monitoring ? `Monitoring: Evaluated ${orch.actionable_events_count || 0} actionable milestone(s) across ${orch.monitoring.evaluated_members_count || 0} member(s).` : null,
-            orch.reminder ? `Reminder Pipeline: Processed ${orch.reminder.total_eligible || 0} eligible reminder(s) (Dry-Run Preview).` : null,
-            orch.recommendation ? `Advisory: Formulated ${orch.recommendations_count || 0} personalized clinical recommendation(s).` : null,
-            orch.report ? `Report Agent: Compiled verifiable report with SHA-256 seal: ${(orch.report_checksum || 'Validated').slice(0, 16)}...` : null,
-            orch.knowledge ? `Knowledge Agent: Retrieved clinical citations from verified MoHFW/WHO guidelines.` : null,
-          ].filter(Boolean),
-          sources: [
-            {
-              id: 'src-orch-1',
-              title: 'Multi-Agent Centralized Orchestrator',
-              authority: 'VaxAssist AI',
-              badge: 'Deterministic Standard',
-              url: '#',
-              excerpt: 'Coordinates specialized agents (Monitoring, Reminder, Knowledge, Recommendation, Report) with state machines and tenant security.',
-              type: 'System Architecture',
-              tags: ['Orchestrator', 'Grounded RAG'],
-            },
-          ],
-          primaryAction: {
-            label: 'View Reports',
-            href: '/reports',
-          },
-          secondaryAction: {
-            label: 'View Reminders',
-            href: '/reminders',
-          },
-        };
-
-        setExchanges((prev) => [...prev, exchangeData]);
-      }
-    } catch (err) {
-      console.warn('Orchestrator execution error:', err);
-      setExchanges((prev) => [
-        ...prev,
-        {
-          id: `err-${Date.now()}`,
-          query: `Workflow Execution: ${workflowType}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          recipient: activeMember.name,
-          relation: activeMember.relationship,
-          title: `Orchestrator Notice`,
-          milestone: {
-            vaccine: 'Execution Notice',
-            dose: 'Status: Incomplete',
-            date: 'Orchestrator',
-            status: 'UPCOMING',
-            countdown: 'Attention',
-            clinic: 'Multi-Agent Ecosystem',
-          },
-          whyItMatters: `Workflow encounter: ${err.message || 'The requested operation could not be completed.'}`,
-          clinicalPoints: [
-            'Deterministic schedule evaluations remain accessible through the Records tab.',
-            'Ensure all required patient and milestone fields are valid before re-running.',
-          ],
-          sources: [],
-        },
-      ]);
-    } finally {
-      setIsThinking(false);
-    }
-  };
-
-  // Messages end ref for auto-scrolling
-  const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
+  // Auto-scroll when messages change or while thinking
+  const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  }, []);
 
   useEffect(() => {
-    if (exchanges.length > 0) {
+    if (exchanges.length > 0 || isThinking) {
       scrollToBottom();
     }
-  }, [exchanges, isThinking]);
+  }, [exchanges, isThinking, scrollToBottom]);
 
   // Handle prefilled query passed via route state
   useEffect(() => {
@@ -358,914 +309,901 @@ export default function AIAssistantPage() {
     }
   }, [location.state]);
 
-  // Handle Query Submission
-  const handleSendPrompt = async (promptText) => {
-    const query = (promptText || inputText).trim();
-    if (!query) return;
-
-    if (!isOnline) {
-      setOfflineNotice("Clinical AI Consultation requires an active internet connection to query ChromaDB and Gemini. Your query has been preserved so you can submit when connection returns.");
-      return;
-    }
-
-    setOfflineNotice(null);
-    setInputText('');
-    setIsThinking(true);
-    setThinkingStage('Reviewing family records');
-
-    setTimeout(() => {
-      setThinkingStage('Querying ChromaDB vector knowledge library');
-    }, 400);
-
-    setTimeout(() => {
-      setThinkingStage('Synthesizing grounded clinical guidance with Gemini');
-    }, 900);
-
-    try {
-      const resp = await knowledgeApi.queryKnowledgeBase({ question: query });
-      if (resp?.data?.answer) {
-        const rag = resp.data;
-        const realSources = (rag.sources && rag.sources.length > 0)
-          ? rag.sources.map((s, idx) => ({
-              id: `src-real-${idx}`,
-              title: s.document_title,
-              authority: s.source_authority,
-              badge: s.page_number ? `Page ${s.page_number}` : 'Official Guideline',
-              url: s.source_url || '#',
-              excerpt: (rag.retrieved_chunks && rag.retrieved_chunks[idx]) ? rag.retrieved_chunks[idx].content : 'Verified clinical context',
-              type: 'Clinical Policy',
-              tags: ['Grounded Evidence', s.source_authority],
-            }))
-          : [DEFAULT_SOURCES_LIBRARY[0]];
-
-        const rawPoints = rag.answer.split('\n').filter((p) => p.trim().length > 15).slice(0, 3);
-        const clinicalPoints = rawPoints.length > 0 ? rawPoints : [
-          'Guidance formulated strictly from verified official immunization guidelines.',
-          'Always verify child-specific administration timelines with your attending pediatrician.',
-        ];
-
-        const exchangeData = {
-          id: `ex-${Date.now()}`,
-          query,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          recipient: activeMember.name,
-          relation: activeMember.relationship,
-          title: `Immunization Guidance: ${activeMember.name}`,
-          milestone: {
-            vaccine: activeMember.nextVaccine?.name || 'Routine Guideline',
-            dose: 'Universal Immunization Programme',
-            date: activeMember.nextVaccine?.dueDate || 'Current Guidance',
-            status: activeMember.nextVaccine?.status || 'UPCOMING',
-            countdown: 'Grounded Evidence',
-            clinic: activeMember.primaryClinic || 'Primary Health Center',
-          },
-          whyItMatters: rag.answer,
-          clinicalPoints: clinicalPoints,
-          sources: realSources,
-          primaryAction: {
-            label: 'View in Schedule',
-            href: '/schedule',
-          },
-          secondaryAction: {
-            label: 'View Family Records',
-            href: '/vaccinations',
-          },
-        };
-
-        setExchanges((prev) => [...prev, exchangeData]);
-        setIsThinking(false);
-        return;
-      }
-    } catch (err) {
-      console.warn('Real RAG query encountered an issue:', err);
-      // Restore user query so it is not lost
-      setInputText(query);
-      setOfflineNotice(`Clinical AI Consultation is temporarily unavailable (${err.message || 'Network error'}). Your query has been preserved so you can retry.`);
-      setIsThinking(false);
-      return;
+  // Auto-resize textarea
+  const handleTextareaInput = (e) => {
+    setInputText(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
     }
   };
 
+  // Keyboard Enter to send, Shift+Enter for newline
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendPrompt();
+    }
+  };
+
+  // Toggle expandable sections
+  const toggleSourceExpand = (id) => {
+    setExpandedSources((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const toggleDetailExpand = (id) => {
+    setExpandedDetails((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Copy text to clipboard
+  const handleCopy = (id, text) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Start fresh conversation (returns to clean empty state with GhostCursor)
   const handleNewChat = () => {
     setExchanges([]);
+    setInputText('');
     setIsThinking(false);
+    setOfflineNotice(null);
   };
 
+  // Inspect source citation in modal
   const handleOpenSourceModal = (source) => {
     setSelectedSource(source);
     setIsSourceModalOpen(true);
   };
 
   // ==========================================
-  // VIEW MODE: ERROR STATE
+  // DISPATCH AI QUERY WORKFLOW
   // ==========================================
-  if (viewState === 'error') {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-primary/20 bg-secondary/50">
-          <span className="text-xs font-semibold text-foreground">Interactive State Preview:</span>
-          <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" onClick={() => setViewState('normal')}>Normal</Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" onClick={() => setViewState('thinking')}>Thinking</Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs px-2.5" onClick={() => setViewState('empty')}>Empty</Button>
-            <Button size="sm" variant="default" className="h-7 text-xs px-2.5">Error State</Button>
-          </div>
-        </div>
+  const handleSendPrompt = async (explicitPrompt) => {
+    const query = (explicitPrompt || inputText).trim();
+    if (!query) return;
 
-        <AIHeaderSection
-          title="VaxAssist AI"
-          description="Vaccination intelligence for your family."
-          badge="Clinical Intelligence Workspace"
-        />
+    if (!isOnline && !isDemoMode) {
+      setOfflineNotice(
+        'Clinical AI Consultation requires an active internet connection to query ChromaDB and Google Gemini. Your query has been preserved.'
+      );
+      return;
+    }
 
-        <div className="my-12">
-          <ErrorState
-            title="VaxAssist couldn't complete that request"
-            description="The clinical knowledge retrieval pipeline encountered a temporary interruption. Try again or explore your family vaccination records directly."
-            onRetry={() => setViewState('normal')}
-          />
-        </div>
-      </div>
-    );
-  }
+    setOfflineNotice(null);
+    setInputText('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
 
-  const isCurrentlyEmpty = viewState === 'empty' || (exchanges.length === 0 && !isThinking);
-  const showThinkingState = viewState === 'thinking' || isThinking;
+    // Add user message
+    const userMessageId = `user-${Date.now()}`;
+    const userMsg = {
+      id: userMessageId,
+      sender: 'user',
+      query,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      recipient: activeMember.name,
+      relationship: activeMember.relationship,
+    };
+
+    setExchanges((prev) => [...prev, userMsg]);
+    setIsThinking(true);
+    setThinkingStage('Reviewing clinical context');
+
+    // Multi-stage thinking feedback
+    const stage1 = setTimeout(() => {
+      setThinkingStage('Querying ChromaDB vector knowledge library');
+    }, 450);
+
+    const stage2 = setTimeout(() => {
+      setThinkingStage('Synthesizing grounded response with Google Gemini');
+    }, 950);
+
+    const startTime = performance.now();
+
+    // Determine query intent
+    const qLower = query.toLowerCase();
+    const isScheduleQuery = /schedule|upcoming|overdue|due|next|when is|timeline|milestone/i.test(qLower);
+    const isRecordsQuery = /record|history|completed|dose|missing|catch.?up/i.test(qLower);
+    const isReportQuery = /report|passport|certificate|summary document|cert/i.test(qLower);
+
+    try {
+      // 1. DEMO MODE SIMULATION
+      if (isDemoMode) {
+        await new Promise((r) => setTimeout(r, 1100));
+        clearTimeout(stage1);
+        clearTimeout(stage2);
+
+        let answer = '';
+        let sources = DEFAULT_SOURCES_LIBRARY.slice(0, 2);
+        let workflowName = 'Clinical Advisory Simulation';
+
+        if (isScheduleQuery) {
+          workflowName = 'Routine Milestone Evaluation';
+          if (activeMember.id === 'fam-1' || activeMember.name?.includes('Aarav')) {
+            answer = `Based on the Universal Immunization Programme (UIP) schedule for **Aarav Sharma** (Age 6 years):\n\n` +
+              `* **DPT Booster 2 (Age 5-6 Years):** Currently **Overdue** (was due on 10 Jul 2026). Catch-up administration is recommended immediately without restarting earlier infant doses.\n` +
+              `* **Upcoming Adolescence Boosters:** Td at age 10 years (July 2030) and Td at age 16 years (July 2036).\n\n` +
+              `You can schedule catch-up immunization at Lilavati Hospital or your nearest Primary Health Center.`;
+          } else if (activeMember.id === 'fam-2' || activeMember.name?.includes('Ananya')) {
+            answer = `Based on the Universal Immunization Programme (UIP) schedule for **Ananya Sharma** (Age 15 weeks):\n\n` +
+              `* **Pentavalent 3, OPV 3 & Rotavirus 3:** Currently **Overdue** (was due at 14 weeks on 18 Sep 2026). Co-administration of all three vaccines is safe and recommended under UIP.\n` +
+              `* **Next Routine Milestone:** Measles-Rubella (MR - Dose 1) & Vitamin A at 9-12 months (March 2027).\n\n` +
+              `Recommended to visit Bandra Urban Primary Health Center to complete her 14-week primary infant series.`;
+          } else if (activeMember.id === 'fam-4' || activeMember.name?.includes('Rajesh')) {
+            answer = `Immunization overview for **Rajesh Sharma** (Adult, Age 35 years):\n\n` +
+              `* **Annual Influenza (Quadrivalent):** Recommended ahead of the winter respiratory peak (due 15 Nov 2026).\n` +
+              `* **Tetanus-Diphtheria (Td):** Routine decennial booster completed; next interval review due in 2031.`;
+          } else if (activeMember.id === 'fam-3' || activeMember.name?.includes('Pooja')) {
+            answer = `Immunization overview for **Pooja Sharma** (Adult, Age 32 years):\n\n` +
+              `* **Routine Status:** All childhood and adult primary immunizations are completely up to date.\n` +
+              `* **Next Scheduled Booster:** Tetanus-Diphtheria (Td) Decennial Booster due on 20 Aug 2028.`;
+          } else {
+            answer = `Based on the Universal Immunization Programme (UIP) schedule, here is your household immunization milestone summary:\n\n` +
+              `* **Aarav Sharma (Son, 6 yrs):** DPT Booster 2 (Age 5-6 Years) is overdue by 2 months. Immediate catch-up recommended.\n` +
+              `* **Ananya Sharma (Daughter, 15 wks):** 14-week primary combination milestone (Pentavalent 3, OPV 3, Rota 3) is overdue. Co-administration recommended.\n` +
+              `* **Rajesh Sharma (Father, 35 yrs):** Annual Seasonal Influenza shot due 15 Nov 2026.\n` +
+              `* **Pooja Sharma (Mother, 32 yrs):** All routine doses current; decennial Td booster due in Aug 2028.\n\n` +
+              `Ensure records are updated with your healthcare worker or clinic after administration.`;
+          }
+        } else if (isRecordsQuery) {
+          workflowName = 'Clinical Record Audit';
+          if (activeMember.id === 'fam-1' || activeMember.name?.includes('Aarav')) {
+            answer = `Immunization coverage review for **Aarav Sharma**:\n\n` +
+              `* **Completed Doses:** 9 doses verified (BCG, HepB-0, OPV-0, Pentavalent 1-3, MR 1-2, DPT Booster 1).\n` +
+              `* **Coverage Progress:** 90% compliance with UIP guidelines.\n` +
+              `* **Action Required:** 1 overdue catch-up booster (DPT Booster 2).`;
+          } else if (activeMember.id === 'fam-2' || activeMember.name?.includes('Ananya')) {
+            answer = `Immunization coverage review for **Ananya Sharma**:\n\n` +
+              `* **Completed Doses:** 9 primary doses verified (BCG, HepB-0, OPV 0-2, Rota 1-2, Pentavalent 1-2).\n` +
+              `* **Coverage Progress:** 64% completed towards infant schedule.\n` +
+              `* **Action Required:** 3 overdue 14-week doses (Pentavalent 3, OPV 3, Rotavirus 3).`;
+          } else {
+            answer = `Immunization coverage review for ${activeMember.name}:\n\n` +
+              `* **Completed Doses:** 34 total verified household immunizations recorded.\n` +
+              `* **Coverage Index:** Aligned with National Immunization Schedule guidelines.\n` +
+              `* **Pending Actions:** 2 pediatric milestones requiring clinic visits (Aarav DPT-B2, Ananya 14-wk series).`;
+          }
+        } else if (isReportQuery) {
+          workflowName = 'Official Report Generation Agent';
+          answer = `Official Immunization Record compiled for ${activeMember.name}.\n\n` +
+            `* **Document:** Verified Comprehensive Vaccination History\n` +
+            `* **Cryptographic Seal:** SHA-256 verified digital audit seal attached\n` +
+            `* **Status:** Ready for download from the Reports tab.`;
+        } else {
+          workflowName = 'Grounded Guideline Inquiry';
+          answer = `According to official MoHFW and WHO immunization guidelines for India:\n\n` +
+            `The Universal Immunization Programme (UIP) protects against 12 life-threatening diseases including Tuberculosis, Diphtheria, Pertussis, Tetanus, Polio, Hepatitis B, Pneumonia & Meningitis caused by Haemophilus influenzae b, Measles, Rubella, Japanese Encephalitis, and Rotavirus.\n\n` +
+            `Timely administration according to the national schedule ensures optimal antibody formation and long-lasting protection.`;
+        }
+
+        const elapsed = Math.round(performance.now() - startTime);
+        const aiMsg = {
+          id: `ai-${Date.now()}`,
+          sender: 'ai',
+          answer,
+          sources,
+          workflow: workflowName,
+          model: 'Gemini 2.0 Flash (Demo Mode)',
+          elapsedMs: elapsed,
+          correlationId: `demo_${Date.now()}`,
+          grounded: true,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        setExchanges((prev) => [...prev, aiMsg]);
+        setIsThinking(false);
+        return;
+      }
+
+      // 2. LIVE MODE: CHOOSE ORCHESTRATOR TASK ROUTING VS KNOWLEDGE RAG
+      if (isScheduleQuery || isRecordsQuery || isReportQuery) {
+        let taskIntent = 'routine';
+        if (isRecordsQuery) taskIntent = 'advisory';
+        if (isReportQuery) taskIntent = 'report';
+
+        const orchResp = await agentApi.routeTask({
+          task_intent: taskIntent,
+          query,
+          family_member_id: selectedMemberId !== 'ALL' ? selectedMemberId : undefined,
+          dry_run: true,
+        });
+
+        clearTimeout(stage1);
+        clearTimeout(stage2);
+
+        if (orchResp?.data) {
+          const orch = orchResp.data;
+          const answer = orch.natural_answer || orch.knowledge?.answer || orch.summary || 'Workflow executed successfully across specialized clinical agents.';
+          let sources = (orch.knowledge?.sources || []).map((s, idx) => ({
+            id: `src-orch-${idx}`,
+            title: s.document_title || 'National Immunization Guideline',
+            authority: s.source_authority || 'MoHFW / WHO',
+            page: s.page_number ? `Page ${s.page_number}` : 'Official Guideline',
+            excerpt: s.excerpt || 'Verified clinical guideline context.',
+            url: s.source_url || '#',
+          }));
+
+          // Merge verified citations from recommendation pathways if knowledge sources are empty
+          if (sources.length === 0 && orch.recommendation?.member_recommendations) {
+            orch.recommendation.member_recommendations.forEach((mr) => {
+              (mr.recommendations || []).forEach((rec) => {
+                (rec.supporting_citations || []).forEach((sc, scIdx) => {
+                  if (!sources.some((existing) => existing.title === sc.document_title)) {
+                    sources.push({
+                      id: `src-rec-${scIdx}`,
+                      title: sc.document_title || 'National Immunization Schedule (NIS)',
+                      authority: sc.source_authority || 'MoHFW',
+                      page: sc.page_number ? `Page ${sc.page_number}` : 'Universal Immunization Programme',
+                      excerpt: sc.excerpt || rec.clinical_rationale || rec.description,
+                      url: sc.source_url || '#',
+                    });
+                  }
+                });
+              });
+            });
+          }
+
+          const elapsed = Math.round(performance.now() - startTime);
+          const aiMsg = {
+            id: `ai-${Date.now()}`,
+            sender: 'ai',
+            answer,
+            sources,
+            workflow: `Orchestrator: ${orch.workflow}`,
+            model: orch.knowledge?.model_used || 'Gemini 2.0 Flash',
+            elapsedMs: elapsed,
+            correlationId: orch.correlation_id || `orch_${Date.now()}`,
+            grounded: orch.knowledge?.has_sufficient_context ?? true,
+            steps: orch.steps_executed || [],
+            telemetrySummary: orch.execution_telemetry_summary || null,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+
+          setExchanges((prev) => [...prev, aiMsg]);
+          setIsThinking(false);
+          return;
+        }
+      }
+
+      // 3. LIVE MODE: KNOWLEDGE / RAG AGENT VIA CHROMA & GEMINI
+      const ragResp = await knowledgeApi.queryKnowledgeBase({ question: query });
+      clearTimeout(stage1);
+      clearTimeout(stage2);
+
+      if (ragResp?.data) {
+        const rag = ragResp.data;
+        const sources = (rag.sources || []).map((s, idx) => ({
+          id: `src-${idx}`,
+          title: s.document_title || 'MoHFW National Immunization Guideline',
+          authority: s.source_authority || 'Health Authority',
+          page: s.page_number ? `Page ${s.page_number}` : 'Official Guideline',
+          url: s.source_url || '#',
+          excerpt: rag.retrieved_chunks?.[idx]?.content || 'Verified official immunization evidence.',
+        }));
+
+        const elapsed = Math.round(performance.now() - startTime);
+        const aiMsg = {
+          id: `ai-${Date.now()}`,
+          sender: 'ai',
+          answer: rag.answer,
+          sources,
+          workflow: 'Knowledge / RAG Agent',
+          model: rag.metadata?.model_used || 'Gemini 2.0 Flash',
+          elapsedMs: elapsed,
+          correlationId: `rag_${Date.now()}`,
+          grounded: rag.metadata?.grounded ?? true,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        setExchanges((prev) => [...prev, aiMsg]);
+        setIsThinking(false);
+      }
+    } catch (err) {
+      clearTimeout(stage1);
+      clearTimeout(stage2);
+      console.error('AI Assistant invocation error:', err);
+
+      const errorMsg = {
+        id: `ai-err-${Date.now()}`,
+        sender: 'ai',
+        isError: true,
+        answer: `I encountered an issue retrieving that information: ${err.message || 'The clinical knowledge service is temporarily unavailable.'}. Please try asking again or consult your healthcare provider.`,
+        sources: [],
+        workflow: 'Error Boundary',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setExchanges((prev) => [...prev, errorMsg]);
+      setIsThinking(false);
+    }
+  };
+
+  const isConversationEmpty = exchanges.length === 0 && !isThinking;
+
+  // Suggested quick prompts (matching reference image pill tags)
+  const quickPills = [
+    { label: "When is the next MMR booster due?", query: "When is the next MMR booster due for children under UIP?" },
+    { label: "What are common side effects of Pentavalent?", query: "What are the common mild side effects of the Pentavalent vaccine?" },
+    { label: "Difference between OPV and IPV?", query: "What is the difference between Oral Polio Vaccine (OPV) and Inactivated Polio Vaccine (IPV)?" },
+    { label: "How to catch up on missed doses?", query: "How does the catch-up immunization pathway work for delayed vaccines in India?" },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* 0. INTERACTIVE STATE PREVIEW TOOLBAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-primary/20 bg-secondary/50">
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
-          <span className="font-semibold text-foreground">Interactive View Modes:</span>
-          <span className="hidden sm:inline">Preview the Vaccination Intelligence Workspace</span>
+    <div className="relative min-h-[calc(100vh-8.5rem)] flex flex-col justify-between">
+      {/* ==============================================================
+          1. GHOST CURSOR EFFECT (EMPTY STATE ONLY)
+          Restricted strictly to when the conversation is empty.
+          Never blocks typing, clicking, or navigation (pointer-events-none).
+         ============================================================== */}
+      {isConversationEmpty && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 opacity-60 dark:opacity-40">
+          <GhostCursor
+            color="#3b82f6"
+            brightness={1.6}
+            edgeIntensity={0.15}
+            trailLength={45}
+            inertia={0.5}
+            grainIntensity={0.03}
+            bloomStrength={0.12}
+            bloomRadius={1.0}
+            bloomThreshold={0.03}
+            fadeDelayMs={800}
+            fadeDurationMs={1200}
+            zIndex={0}
+          />
         </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant={viewState === 'normal' && exchanges.length > 0 ? 'default' : 'outline'}
-            className="h-7 text-xs px-2.5"
-            onClick={() => {
-              if (exchanges.length === 0) setExchanges(STRUCTURED_DEMO_EXCHANGES);
-              setViewState('normal');
-              setIsThinking(false);
-            }}
-          >
-            Normal Workspace
-          </Button>
-          <Button
-            size="sm"
-            variant={showThinkingState ? 'default' : 'outline'}
-            className="h-7 text-xs px-2.5"
-            onClick={() => {
-              setViewState('thinking');
-              setIsThinking(true);
-              setThinkingStage('Checking UIP & WHO guideline library');
-            }}
-          >
-            Thinking State
-          </Button>
-          <Button
-            size="sm"
-            variant={isCurrentlyEmpty ? 'default' : 'outline'}
-            className="h-7 text-xs px-2.5"
-            onClick={() => {
-              setViewState('empty');
-              setExchanges([]);
-              setIsThinking(false);
-            }}
-          >
-            Initial Welcome
-          </Button>
-          <Button
-            size="sm"
-            variant={viewState === 'error' ? 'default' : 'outline'}
-            className="h-7 text-xs px-2.5"
-            onClick={() => setViewState('error')}
-          >
-            Error State
-          </Button>
-        </div>
-      </div>
+      )}
 
-      {/* 1. AI HERO & HEADER WITH FAMILY CONTEXT SELECTOR */}
-      <div className="p-6 rounded-2xl border border-border/80 bg-linear-to-r from-card via-card to-primary/[0.03] shadow-2xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground font-sora">
-                VaxAssist AI
+      {/* ==============================================================
+          2. TOP BAR & WORKSPACE CONTROLS
+         ============================================================== */}
+      <header className="relative z-10 flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border/60">
+        <div className="flex items-center gap-2.5">
+          <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
+            <Sparkles className="h-5 w-5 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="font-bold text-lg text-foreground tracking-tight">
+                VaxAssist AI Assistant
               </h1>
               <Badge
                 variant="outline"
-                className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 gap-1.5 text-xs py-0.5 px-2.5 font-medium"
+                className={`text-[10px] font-medium py-0.5 px-2 gap-1.5 ${
+                  isDemoMode
+                    ? 'border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10'
+                    : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                }`}
               >
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Knowledge-aware assistant</span>
+                <span className={`h-1.5 w-1.5 rounded-full ${isDemoMode ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+                <span>{isDemoMode ? 'Demo Mode' : 'Live Grounded RAG'}</span>
               </Badge>
             </div>
-            <p className="text-sm font-semibold text-primary font-sans">
-              Vaccination intelligence for your family.
-            </p>
-            <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
-              Ask questions, understand your vaccination schedule, explore your records, and find guidance grounded in trusted national immunization guidelines (UIP & WHO).
+            <p className="text-xs text-muted-foreground">
+              Grounded in official National Immunization Guidelines (UIP & WHO)
             </p>
           </div>
+        </div>
 
-          {/* Context Selector & Action Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 self-start md:self-center shrink-0">
-            <div className="flex items-center gap-2 p-1.5 rounded-xl border border-border bg-card">
-              <span className="text-xs font-semibold text-muted-foreground pl-2 whitespace-nowrap">
-                Answering for:
-              </span>
+        {/* Top Controls: Family Context & Reset */}
+        <div className="flex items-center gap-2">
+          {displayMembers.length > 0 && (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl border border-border/80 bg-card text-xs">
+              <span className="text-muted-foreground font-medium hidden sm:inline">Context:</span>
               <Select value={selectedMemberId} onValueChange={setSelectedMemberId}>
-                <SelectTrigger className="h-8 text-xs font-bold border-0 bg-secondary/80 focus:ring-0">
-                  <SelectValue placeholder="Select Member" />
+                <SelectTrigger className="h-7 text-xs font-semibold border-0 bg-transparent focus:ring-0 px-1 gap-1">
+                  <SelectValue placeholder="All Family" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Entire Family (All Members)</SelectItem>
+                <SelectContent align="end">
+                  <SelectItem value="ALL">Entire Family</SelectItem>
                   {displayMembers.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
-                      {m.name} {m.relationship ? `(${m.relationship}${m.age ? `, ${m.age}` : ''})` : ''}
+                      {m.name} {m.relationship ? `(${m.relationship})` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+          )}
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRunOrchestratorWorkflow('routine_cycle')}
-              className="h-10 text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-              title="Run Phase 9 Multi-Agent Routine Sweep"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Routine Sweep</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRunOrchestratorWorkflow('clinical_advisory')}
-              className="h-10 text-xs font-semibold gap-1.5"
-              title="Run Clinical Decision Support Advisory"
-            >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Advisory</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRunOrchestratorWorkflow('comprehensive_record')}
-              className="h-10 text-xs font-semibold gap-1.5"
-              title="Generate Official Immunization Passport & Record"
-            >
-              <FileCheck className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">Official Record</span>
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleRunOrchestratorWorkflow('knowledge_inquiry')}
-              className="h-10 text-xs font-semibold gap-1.5"
-              title="Inquire official UIP and WHO immunization guidelines"
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Guideline Inquiry</span>
-            </Button>
-
+          {exchanges.length > 0 && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleNewChat}
-              className="h-10 text-xs font-semibold gap-1.5"
+              className="h-8 text-xs font-semibold gap-1.5 rounded-xl border-border/80 hover:bg-primary/5 hover:text-primary transition-colors"
+              title="Reset conversation and start fresh"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              <span>New</span>
+              <span className="hidden sm:inline">New Chat</span>
             </Button>
-
-            {/* Mobile Sheet Trigger */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-10 text-xs gap-1.5 lg:hidden"
-              onClick={() => setIsMobilePanelOpen(true)}
-            >
-              <Layers className="h-3.5 w-3.5 text-primary" />
-              <span>Context & Sources</span>
-            </Button>
-          </div>
+          )}
         </div>
-      </div>
+      </header>
 
-      {/* Offline Notice Banner */}
+      {/* Offline Alert Notice */}
       {(!isOnline || offlineNotice) && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-3">
-          <WifiOff className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="font-semibold text-amber-900 dark:text-amber-100">
-              {!isOnline ? 'AI Clinical Guidance Offline' : 'Clinical Service Notice'}
-            </p>
-            <p>
-              {offlineNotice || 'Real-time clinical AI guidance requires an active internet connection to query ChromaDB and Google Gemini. You can view previous exchanges below; your input will be preserved until connectivity returns.'}
-            </p>
+        <div className="relative z-10 mt-3 p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2.5">
+          <WifiOff className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>{offlineNotice || 'Internet offline. You can view previous messages, but new queries require an active connection.'}</span>
+        </div>
+      )}
+
+      {/* ==============================================================
+          3. MAIN CONTENT: EMPTY SCREEN VS CONVERSATION STREAM
+         ============================================================== */}
+      <main className="relative z-10 flex-1 flex flex-col justify-center py-6">
+        {/* -----------------------------------------------------------
+            A. EMPTY CONVERSATION STATE (INSPIRED BY REFERENCE IMAGE)
+           ----------------------------------------------------------- */}
+        {isConversationEmpty ? (
+          <div className="max-w-4xl mx-auto w-full flex flex-col items-center justify-center text-center space-y-8 py-4 sm:py-8">
+            {/* Centered Welcome Title & Subtitle */}
+            <div className="space-y-3 max-w-2xl px-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-foreground font-sans">
+                Welcome back, <span className="text-primary">{userName}</span>.
+              </h2>
+              <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
+                How can I help with your vaccination care today? Track upcoming schedules, review records, verify national guidelines, and generate certified reports.
+              </p>
+            </div>
+
+            {/* Quick Action Suggestion Cards (4 Columns matching reference style) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 w-full px-2">
+              {/* Card 1: Vaccination Schedule */}
+              <button
+                type="button"
+                onClick={() => handleSendPrompt("What are the upcoming and overdue vaccinations for my family?")}
+                className="group p-4 rounded-2xl border border-border/80 bg-card/70 hover:bg-card hover:border-primary/50 text-left transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="h-9 w-9 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center transition-transform group-hover:scale-110">
+                    <CalendarDays className="h-5 w-5" />
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                    Vaccination Schedule
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+                    Check upcoming UIP milestones, due dates & overdue alerts.
+                  </p>
+                </div>
+              </button>
+
+              {/* Card 2: Vaccine Information */}
+              <button
+                type="button"
+                onClick={() => handleSendPrompt("What are the essential vaccines in India's Universal Immunization Programme and their schedules?")}
+                className="group p-4 rounded-2xl border border-border/80 bg-card/70 hover:bg-card hover:border-primary/50 text-left transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="h-9 w-9 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center transition-transform group-hover:scale-110">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                    Vaccine Information
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+                    Ask about safety, efficacy, and official MoHFW/WHO guidelines.
+                  </p>
+                </div>
+              </button>
+
+              {/* Card 3: My Vaccination Records */}
+              <button
+                type="button"
+                onClick={() => handleSendPrompt("Review my family vaccination records and identify any missing doses.")}
+                className="group p-4 rounded-2xl border border-border/80 bg-card/70 hover:bg-card hover:border-primary/50 text-left transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center transition-transform group-hover:scale-110">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                    My Vaccination Records
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+                    Review completed doses, coverage progress & catch-up advice.
+                  </p>
+                </div>
+              </button>
+
+              {/* Card 4: Generate Report */}
+              <button
+                type="button"
+                onClick={() => handleSendPrompt("Generate a comprehensive immunization report for my records.")}
+                className="group p-4 rounded-2xl border border-border/80 bg-card/70 hover:bg-card hover:border-primary/50 text-left transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 flex flex-col justify-between gap-3 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <div className="h-9 w-9 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center transition-transform group-hover:scale-110">
+                    <FileCheck className="h-5 w-5" />
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
+                    Generate Report
+                  </h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed mt-1">
+                    Compile a verifiable immunization certificate or digital record.
+                  </p>
+                </div>
+              </button>
+            </div>
+
+            {/* Subtle Center AI Connector Badge */}
+            <div className="flex items-center justify-center pt-2">
+              <div className="h-9 w-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
+                <Sparkles className="h-4 w-4" />
+              </div>
+            </div>
+
+            {/* Prominent Center Chat Input Container (Matching Reference Design) */}
+            <div className="w-full max-w-3xl px-2">
+              <div className="rounded-2xl border border-border/90 bg-card/90 dark:bg-card/70 backdrop-blur-xl shadow-xl ring-1 ring-primary/10 focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary/50 transition-all p-3 sm:p-4 text-left">
+                <textarea
+                  ref={textareaRef}
+                  value={inputText}
+                  onChange={handleTextareaInput}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Ask anything about vaccinations, schedules, or guidelines for ${activeMember.name}...`}
+                  rows={2}
+                  className="w-full bg-transparent resize-none border-0 p-1 text-sm sm:text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0 leading-relaxed"
+                />
+
+                <div className="flex items-center justify-between pt-3 border-t border-border/50 gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-[11px] font-normal py-0.5 px-2 bg-secondary/80 text-muted-foreground">
+                      Answering for: <strong className="text-foreground ml-1">{activeMember.name}</strong>
+                    </Badge>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    onClick={() => handleSendPrompt()}
+                    disabled={!inputText.trim() || isThinking}
+                    className="gap-2 h-9 px-4 rounded-xl font-semibold shadow-xs transition-all active:scale-95"
+                  >
+                    <span>Send</span>
+                    <Send className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Quick Prompt Pill Tags (Below Input) */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-4">
+                {quickPills.map((pill, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handleSendPrompt(pill.query)}
+                    className="text-xs px-3 py-1.5 rounded-full border border-border/80 bg-card/60 hover:bg-card hover:border-primary/50 text-muted-foreground hover:text-foreground transition-all duration-150 shadow-2xs"
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* -----------------------------------------------------------
+             B. ACTIVE CONVERSATION STREAM
+             ----------------------------------------------------------- */
+          <div className="w-full max-w-4xl mx-auto space-y-6 pb-24">
+            {exchanges.map((exchange) => {
+              if (exchange.sender === 'user') {
+                return (
+                  <div key={exchange.id} className="flex justify-end gap-3 pl-8">
+                    <div className="max-w-2xl rounded-2xl rounded-tr-sm bg-primary/10 border border-primary/20 p-4 text-foreground shadow-2xs space-y-1.5">
+                      <div className="flex items-center justify-between gap-4 text-[11px] text-muted-foreground">
+                        <span className="font-semibold text-primary">You</span>
+                        <span>{exchange.timestamp}</span>
+                      </div>
+                      <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">
+                        {exchange.query}
+                      </p>
+                      {exchange.recipient && (
+                        <div className="text-[10px] text-muted-foreground pt-1 border-t border-primary/10">
+                          Target Context: {exchange.recipient} ({exchange.relationship})
+                        </div>
+                      )}
+                    </div>
+                    <Avatar className="h-8 w-8 shrink-0 border border-primary/20 bg-primary/20 text-primary text-xs font-bold mt-1">
+                      <AvatarFallback>{userName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                  </div>
+                );
+              }
+
+              // AI Message
+              return (
+                <div key={exchange.id} className="flex items-start gap-3 pr-4 sm:pr-8 animate-in fade-in duration-200">
+                  <Avatar className="h-8 w-8 shrink-0 border border-primary/30 bg-primary/10 text-primary text-xs font-bold mt-1 shadow-xs">
+                    <AvatarFallback>
+                      <Bot className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="flex-1 max-w-3xl space-y-3">
+                    <Card className={`border shadow-2xs overflow-hidden ${exchange.isError ? 'border-destructive/40 bg-destructive/5' : 'border-border/80 bg-card'}`}>
+                      <CardHeader className="py-2.5 px-4 bg-muted/20 border-b border-border/60 flex flex-row items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-xs text-foreground">VaxAssist Clinical AI</span>
+                          {exchange.workflow && (
+                            <Badge variant="outline" className="text-[10px] font-mono py-0 px-1.5 text-muted-foreground">
+                              {exchange.workflow}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span className="text-[11px]">{exchange.timestamp}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(exchange.id, exchange.answer)}
+                            className="p-1 hover:text-foreground text-muted-foreground transition-colors"
+                            title="Copy response"
+                          >
+                            {copiedId === exchange.id ? (
+                              <Check className="h-3.5 w-3.5 text-status-completed" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className="p-4 sm:p-5 space-y-4">
+                        {/* Formatted Answer Body */}
+                        <FormattedAIMessage content={exchange.answer} />
+
+                        {/* ==============================================================
+                            EXPANDABLE SECTION: SOURCES & CITATIONS (RAG)
+                           ============================================================== */}
+                        {exchange.sources && exchange.sources.length > 0 && (
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={() => toggleSourceExpand(exchange.id)}
+                              className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border/70 bg-secondary/30 hover:bg-secondary/60 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <div className="flex items-center gap-2">
+                                <BookOpen className="h-3.5 w-3.5 text-primary" />
+                                <span>Verified Sources & Citations ({exchange.sources.length})</span>
+                              </div>
+                              {expandedSources[exchange.id] ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </button>
+
+                            {expandedSources[exchange.id] && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-1 animate-in fade-in duration-200">
+                                {exchange.sources.map((src, sIdx) => (
+                                  <div
+                                    key={sIdx}
+                                    onClick={() => handleOpenSourceModal(src)}
+                                    className="p-2.5 rounded-xl border border-border/80 bg-card hover:border-primary/40 hover:bg-primary/[0.02] cursor-pointer transition-all flex items-start gap-2.5 group"
+                                  >
+                                    <div className="p-1 rounded-lg bg-primary/10 text-primary shrink-0 group-hover:scale-105 transition-transform mt-0.5">
+                                      <FileText className="h-3.5 w-3.5" />
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-semibold text-xs text-foreground truncate group-hover:text-primary transition-colors">
+                                        {src.title}
+                                      </p>
+                                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground pt-0.5">
+                                        <span>{src.authority}</span>
+                                        {src.page && <span>• {src.page}</span>}
+                                      </div>
+                                    </div>
+                                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* ==============================================================
+                            EXPANDABLE SECTION: AI PROCESSING & AGENT TELEMETRY
+                           ============================================================== */}
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={() => toggleDetailExpand(exchange.id)}
+                            className="w-full flex items-center justify-between p-2.5 rounded-xl border border-border/60 bg-muted/10 hover:bg-muted/30 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>AI Processing & Agent Telemetry</span>
+                            </div>
+                            {expandedDetails[exchange.id] ? (
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+
+                          {expandedDetails[exchange.id] && (
+                            <div className="mt-2 p-3 rounded-xl border border-border/60 bg-muted/20 text-xs font-mono space-y-1.5 animate-in fade-in duration-200">
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Model:</span>
+                                <span className="text-foreground">{exchange.model || 'Gemini 2.0 Flash'}</span>
+                              </div>
+                              {exchange.elapsedMs && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Latency:</span>
+                                  <span className="text-foreground">{exchange.elapsedMs} ms</span>
+                                </div>
+                              )}
+                              {exchange.correlationId && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Trace ID:</span>
+                                  <span className="text-foreground truncate max-w-[200px]">{exchange.correlationId}</span>
+                                </div>
+                              )}
+                              {exchange.steps && exchange.steps.length > 0 && (
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Chained Steps:</span>
+                                  <span className="text-primary">{exchange.steps.join(' → ')}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Grounded RAG:</span>
+                                <span className={exchange.grounded ? 'text-emerald-500 font-bold' : 'text-amber-500'}>
+                                  {exchange.grounded ? 'Verified official sources' : 'General immunization advisory'}
+                                </span>
+                              </div>
+                              {exchange.telemetrySummary && (
+                                <div className="pt-2 mt-1 border-t border-border/40 text-[11px] text-muted-foreground leading-relaxed">
+                                  <span className="text-foreground font-semibold">Workflow Telemetry: </span>
+                                  <span>{exchange.telemetrySummary}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Mandatory Clinical Disclaimer */}
+                        <div className="pt-2 border-t border-border/50 text-[11px] text-muted-foreground/80 flex items-start gap-2">
+                          <Info className="h-3.5 w-3.5 shrink-0 text-primary mt-0.5" />
+                          <span>
+                            Grounded in official National Immunization Guidelines (UIP, WHO). For informational reference; always consult your pediatrician before clinical decisions.
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Thinking / Reasoning Bubble */}
+            {isThinking && (
+              <div className="flex items-start gap-3 animate-in fade-in duration-200">
+                <Avatar className="h-8 w-8 border border-primary/30 bg-primary/10 text-primary text-xs font-bold mt-1">
+                  <AvatarFallback>
+                    <Bot className="h-4 w-4" />
+                  </AvatarFallback>
+                </Avatar>
+
+                <div className="p-3.5 rounded-2xl rounded-tl-sm border border-primary/20 bg-card shadow-xs max-w-md">
+                  <LatticeLoader
+                    label={`${thinkingStage}...`}
+                    pattern="orbit"
+                    color="#3b82f6"
+                    cellSize={6}
+                    gap={2.5}
+                    fontSize={13}
+                    showTimer={true}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
+          </div>
+        )}
+      </main>
+
+      {/* ==============================================================
+          4. FLOATING BOTTOM CHAT BAR (WHEN CONVERSATION IS ACTIVE)
+         ============================================================== */}
+      {!isConversationEmpty && (
+        <div className="sticky bottom-0 z-20 pt-2 pb-4 bg-linear-to-t from-background via-background to-transparent">
+          <div className="max-w-3xl mx-auto px-2">
+            <div className="rounded-2xl border border-border/90 bg-card/95 dark:bg-card/85 backdrop-blur-xl shadow-xl ring-1 ring-primary/10 focus-within:ring-2 focus-within:ring-primary/40 focus-within:border-primary/50 transition-all p-2.5 sm:p-3">
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={textareaRef}
+                  value={inputText}
+                  onChange={handleTextareaInput}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Ask a follow-up about vaccination for ${activeMember.name}...`}
+                  rows={1}
+                  className="flex-1 bg-transparent resize-none border-0 p-1.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-0 leading-relaxed max-h-32"
+                />
+
+                <Button
+                  size="sm"
+                  onClick={() => handleSendPrompt()}
+                  disabled={!inputText.trim() || isThinking}
+                  className="h-9 px-3.5 rounded-xl font-semibold shadow-xs shrink-0 transition-all active:scale-95"
+                >
+                  <span>Send</span>
+                  <Send className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1.5 px-1 border-t border-border/40 mt-1.5">
+                <span>Answering for: <strong className="text-foreground">{activeMember.name}</strong></span>
+                <span className="hidden sm:inline">Press Enter to send, Shift+Enter for new line</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 2. MAIN 2-COLUMN WORKSPACE: CONTEXT & SOURCES (LEFT 4) + INTELLIGENCE WORKSPACE (RIGHT 8) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* ================= LEFT SIDE PANEL (4 COLS - DESKTOP) ================= */}
-        <div className="hidden lg:block lg:col-span-4 space-y-5">
-          {/* Current Context Card */}
-          <Card className="border border-border/80 shadow-2xs overflow-hidden">
-            <CardHeader className="pb-3 border-b border-border/60 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs uppercase font-bold text-muted-foreground tracking-wider font-sora">
-                  Current Context
-                </CardTitle>
-                <Badge variant="secondary" className="text-[10px] font-mono">
-                  Active Profile
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-lg text-foreground font-sans">
-                    {activeMember.name}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {activeMember.age} • {activeMember.relationship}
-                  </p>
-                </div>
-                <Avatar className="h-12 w-12 border text-sm font-bold border-primary/20 bg-primary/10 text-primary">
-                  <AvatarFallback>
-                    {activeMember.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
-
-              {/* Progress bar */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground font-medium">Vaccination Progress</span>
-                  <span className="font-bold text-foreground font-mono">{activeMember.progress}%</span>
-                </div>
-                <Progress value={activeMember.progress} className="h-2" />
-                <p className="text-[11px] text-muted-foreground">
-                  {activeMember.completedDoses} of {activeMember.totalDoses} expected doses recorded
-                </p>
-              </div>
-
-              <Separator />
-
-              {/* Next Vaccination Milestone */}
-              <div className="p-3.5 rounded-xl bg-secondary/50 border border-border/60 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-[11px] text-muted-foreground uppercase tracking-wider">
-                    Next Vaccination
-                  </span>
-                  <StatusBadge status={activeMember.nextVaccine?.status} size="sm" />
-                </div>
-                <p className="font-bold text-sm text-foreground">
-                  {activeMember.nextVaccine?.name}
-                </p>
-                <div className="flex items-center justify-between text-muted-foreground text-[11px]">
-                  <span>{activeMember.nextVaccine?.dueDate}</span>
-                  <span className={activeMember.nextVaccine?.status === 'OVERDUE' ? 'text-status-overdue font-semibold' : ''}>
-                    {activeMember.nextVaccine?.relative}
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                asChild
-                className="w-full text-xs font-semibold justify-between h-8.5"
-              >
-                <Link to={activeMember.id === 'ALL' ? '/vaccinations' : `/family/${activeMember.id}`}>
-                  <span>View Vaccination Records</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Trusted Knowledge Library */}
-          <Card className="border border-border/80 shadow-2xs">
-            <CardHeader className="pb-3 border-b border-border/60 bg-muted/20">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xs uppercase font-bold text-foreground tracking-wider font-sora flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-primary" />
-                  <span>Trusted Knowledge</span>
-                </CardTitle>
-                <Badge variant="outline" className="text-[10px] border-primary/30 text-primary">
-                  Official Standards
-                </Badge>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-4 space-y-2.5 text-xs">
-              {DEFAULT_SOURCES_LIBRARY.map((source) => (
-                <div
-                  key={source.id}
-                  onClick={() => handleOpenSourceModal(source)}
-                  className="p-3 rounded-xl border border-border/60 bg-card hover:border-primary/50 hover:bg-primary/[0.02] transition-all cursor-pointer space-y-1 group"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                      {source.title}
-                    </span>
-                    <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
-                      {source.confidence}%
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground line-clamp-1">
-                    {source.organization} • {source.section}
-                  </p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* Recent Explorations / Conversations */}
-          <Card className="border border-border/80 shadow-2xs">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-xs uppercase font-bold text-muted-foreground tracking-wider font-sora">
-                Recent Inquiries
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0 space-y-1.5">
-              {INITIAL_CONVERSATION_HISTORY.map((conv) => (
-                <button
-                  key={conv.id}
-                  type="button"
-                  onClick={() => {
-                    setExchanges(STRUCTURED_DEMO_EXCHANGES);
-                    setViewState('normal');
-                  }}
-                  className="w-full text-left p-2.5 rounded-xl hover:bg-secondary/80 transition-colors border border-transparent hover:border-border text-xs flex items-center justify-between group cursor-pointer"
-                >
-                  <div className="min-w-0 pr-2">
-                    <span className="font-semibold text-foreground block truncate group-hover:text-primary transition-colors">
-                      {conv.title}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">{conv.date} • {conv.memberContext}</span>
-                  </div>
-                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ================= RIGHT MAIN WORKSPACE (8 COLS) ================= */}
-        <div className="lg:col-span-8 space-y-6">
-          {/* Smart Question Area */}
-          <div className="space-y-2.5">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider font-sora block">
-              What would you like to explore?
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {CATEGORIZED_EXPLORATION_PROMPTS.map((item, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleSendPrompt(item.question)}
-                  className="p-3.5 rounded-xl border border-border/80 bg-card hover:border-primary/50 hover:bg-primary/[0.02] transition-all text-left group cursor-pointer flex flex-col justify-between space-y-2 shadow-2xs"
-                >
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="text-[10px] font-semibold text-primary border-primary/30">
-                      {item.category}
-                    </Badge>
-                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-xs sm:text-sm text-foreground group-hover:text-primary transition-colors">
-                      {item.label}
-                    </h4>
-                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5">
-                      {item.description}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Structured Intelligence Conversation Stream */}
-          <div className="space-y-6">
-            {isCurrentlyEmpty ? (
-              /* Initial Welcome State */
-              <Card className="p-8 text-center border-dashed border-2 border-border/80 bg-card/60 space-y-4">
-                <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto border border-primary/20">
-                  <Sparkles className="h-7 w-7 text-primary" />
-                </div>
-                <div className="space-y-1.5 max-w-md mx-auto">
-                  <h3 className="font-bold text-lg text-foreground font-sora">
-                    Ready to Explore Vaccination Guidance
-                  </h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                    Select one of the exploration prompts above, or ask a specific question about {activeMember.name}'s schedule, records, or catch-up rules below.
-                  </p>
-                </div>
-              </Card>
-            ) : (
-              /* Structured Response Exchanges */
-              <>
-                {exchanges.map((ex) => (
-                  <div key={ex.id} className="space-y-4">
-                    {/* User Question Block */}
-                    <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 flex items-start gap-3">
-                      <Avatar className="h-8 w-8 border border-primary/30 bg-primary text-primary-foreground shrink-0 text-xs font-bold">
-                        <AvatarFallback>U</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span className="font-bold text-foreground">You asked:</span>
-                          <span className="font-mono text-[10px]">{ex.timestamp}</span>
-                        </div>
-                        <p className="text-sm font-semibold text-foreground mt-0.5">
-                          "{ex.query}"
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Structured AI Healthcare Response Card */}
-                    <Card className="border border-border/80 bg-card shadow-2xs overflow-hidden">
-                      {/* Response Header */}
-                      <CardHeader className="pb-3 border-b border-border/60 bg-muted/15">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className="p-1 rounded-lg bg-primary/10 text-primary">
-                              <Sparkles className="h-4 w-4" />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-sm text-foreground font-sora">
-                                {ex.title}
-                              </h3>
-                              <span className="text-[11px] text-muted-foreground">
-                                Beneficiary: {ex.recipient} ({ex.relation})
-                              </span>
-                            </div>
-                          </div>
-                          <Badge variant="outline" className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[10px] font-medium gap-1">
-                            <CheckCircle2 className="h-3 w-3" />
-                            Verified Guidance
-                          </Badge>
-                        </div>
-                      </CardHeader>
-
-                      <CardContent className="p-5 sm:p-6 space-y-4 text-xs sm:text-sm">
-                        {/* Milestone Callout Box */}
-                        {ex.milestone && (
-                          <div className="p-4 rounded-xl border border-border/80 bg-secondary/40 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
-                                Milestone Details
-                              </span>
-                              <StatusBadge status={ex.milestone.status} size="sm" />
-                            </div>
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                              <span className="font-bold text-base text-foreground font-sans">
-                                {ex.milestone.vaccine}
-                              </span>
-                              <span className="font-mono text-xs text-primary font-semibold">
-                                {ex.milestone.date} ({ex.milestone.countdown})
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-1">
-                              <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                              <span>{ex.milestone.clinic}</span>
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Why This Matters */}
-                        <div className="space-y-1.5">
-                          <span className="font-bold text-xs uppercase text-muted-foreground tracking-wider font-sora">
-                            Why This Matters
-                          </span>
-                          <p className="text-xs sm:text-sm text-foreground leading-relaxed">
-                            {ex.whyItMatters}
-                          </p>
-                        </div>
-
-                        {/* Clinical Points Checklist */}
-                        {ex.clinicalPoints && (
-                          <div className="space-y-2 pt-1">
-                            <span className="font-bold text-xs uppercase text-muted-foreground tracking-wider font-sora">
-                              Key Clinical Recommendations
-                            </span>
-                            <ul className="space-y-1.5 text-xs text-foreground">
-                              {ex.clinicalPoints.map((pt, i) => (
-                                <li key={i} className="flex items-start gap-2">
-                                  <Check className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                                  <span className="leading-relaxed">{pt}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {/* Sources Reference Chips */}
-                        {ex.sources && ex.sources.length > 0 && (
-                          <div className="space-y-2 pt-2 border-t border-border/60">
-                            <span className="font-bold text-[11px] uppercase text-muted-foreground tracking-wider font-sora flex items-center gap-1.5">
-                              <BookOpen className="h-3.5 w-3.5 text-primary" />
-                              <span>Clinical Evidence Sources:</span>
-                            </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {ex.sources.map((src) => (
-                                <SourceCitationChip
-                                  key={src.id}
-                                  title={src.title}
-                                  source={src.organization}
-                                  page={src.page}
-                                  confidence={src.confidence}
-                                  onClick={() => handleOpenSourceModal(src)}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-
-                      {/* Related Actions Footer */}
-                      <CardFooter className="p-4 bg-muted/20 border-t border-border/60 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          {ex.primaryAction && (
-                            <Button size="sm" asChild className="text-xs font-semibold h-8">
-                              <Link to={ex.primaryAction.href}>
-                                <span>{ex.primaryAction.label}</span>
-                                <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
-                              </Link>
-                            </Button>
-                          )}
-                          {ex.secondaryAction && (
-                            <Button variant="outline" size="sm" asChild className="text-xs h-8">
-                              <Link to={ex.secondaryAction.href}>
-                                <span>{ex.secondaryAction.label}</span>
-                              </Link>
-                            </Button>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          Verified against UIP Standard
-                        </span>
-                      </CardFooter>
-                    </Card>
-                  </div>
-                ))}
-
-                {/* Thinking / Progression State with React Bits ThoughtLine */}
-                {showThinkingState && (
-                  <Card className="p-5 border border-primary/30 bg-primary/[0.02] space-y-4 shadow-sm">
-                    <div className="flex items-center justify-between pb-2 border-b border-primary/10">
-                      <ThoughtLine
-                        working={isThinking}
-                        steps={[
-                          'Reading the question',
-                          'Searching vaccination knowledge',
-                          'Checking family context',
-                          'Drafting an answer'
-                        ]}
-                        label="Thinking…"
-                        doneLabel="Thought for"
-                        glyph="sparkle"
-                        fontSize={15}
-                        breathPeriod={1.6}
-                        breathDepth={0.45}
-                        settleDuration={350}
-                        settleBlur={2}
-                        collapsible
-                        collapseOnSettle
-                        showTimer
-                        onSettle={seconds => console.log(`thought for ${seconds}s`)}
-                      />
-                      <Badge variant="outline" className="border-primary/40 text-primary text-[10px] font-mono uppercase">
-                        RAG Active
-                      </Badge>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Skeleton className="h-3 w-full bg-primary/10" />
-                      <Skeleton className="h-3 w-4/5 bg-primary/10" />
-                      <Skeleton className="h-3 w-2/3 bg-primary/10" />
-                    </div>
-                  </Card>
-                )}
-
-                <div ref={messagesEndRef} />
-              </>
-            )}
-          </div>
-
-          {/* AI Input & Quick Action Area */}
-          <div className="p-4 sm:p-5 rounded-2xl border border-border/80 bg-card space-y-3 shadow-2xs">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendPrompt();
-              }}
-              className="space-y-3"
-            >
-              <div className="relative">
-                <Textarea
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendPrompt();
-                    }
-                  }}
-                  placeholder={`Ask about ${activeMember.name}'s vaccinations, schedule, records, or catch-up guidelines...`}
-                  rows={3}
-                  className="resize-none text-xs sm:text-sm min-h-[72px] p-3.5 rounded-xl pr-12"
-                />
-
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!inputText.trim() || isThinking}
-                  className="absolute right-3 bottom-3 h-8 w-8 p-0 rounded-lg shadow-xs"
-                >
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Quick Action Shortcuts around Input */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[11px] font-semibold text-muted-foreground hidden sm:inline">
-                    Shortcuts:
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5"
-                    onClick={() => navigate('/schedule')}
-                  >
-                    View Schedule
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5"
-                    onClick={() => navigate('/vaccinations')}
-                  >
-                    View Records
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-[11px] px-2.5"
-                    onClick={() => handleSendPrompt('What vaccines are currently due or overdue for my family?')}
-                  >
-                    Check Due Vaccinations
-                  </Button>
-                </div>
-
-                <span className="text-[10px] text-muted-foreground font-mono hidden md:inline">
-                  Press Enter to send • Shift + Enter for newline
-                </span>
-              </div>
-            </form>
-
-            {/* Informational Disclaimer */}
-            <div className="p-3 rounded-xl bg-secondary/50 border border-border/60 text-[11px] text-muted-foreground leading-relaxed flex items-start gap-2">
-              <Info className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
-              <span>
-                <strong>Clinical Grounding Notice:</strong> VaxAssist AI provides informational assistance grounded in official National Immunization Schedule (UIP) and WHO guidelines. It does not replace professional medical diagnosis. For personal or urgent medical concerns, consult your licensed pediatrician.
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. SOURCE INSPECTOR MODAL */}
+      {/* ==============================================================
+          5. SOURCE CITATION DETAIL MODAL
+         ============================================================== */}
       <Dialog open={isSourceModalOpen} onOpenChange={setIsSourceModalOpen}>
         <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <BookOpen className="h-4 w-4 text-primary" />
+              <span>Verified Clinical Source Document</span>
+            </DialogTitle>
+            <DialogDescription>
+              Retrieved from the VaxAssist AI ChromaDB vector knowledge base.
+            </DialogDescription>
+          </DialogHeader>
+
           {selectedSource && (
-            <>
-              <DialogHeader>
-                <div className="flex items-center justify-between gap-2 pr-4">
-                  <Badge variant="outline" className="border-primary/40 bg-primary/10 text-primary text-[10px] font-mono">
-                    {selectedSource.confidence}% Confidence Match
-                  </Badge>
-                  <span className="text-[11px] font-mono text-muted-foreground">{selectedSource.year}</span>
-                </div>
-                <DialogTitle className="text-base sm:text-lg font-bold font-sora pt-1">
+            <div className="space-y-4 py-2">
+              <div className="p-3.5 rounded-xl bg-secondary/50 border border-border/80 space-y-1.5">
+                <h4 className="font-bold text-sm text-foreground">
                   {selectedSource.title}
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  Published by {selectedSource.organization} • {selectedSource.section}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-3 py-2 text-xs">
-                <div className="p-4 rounded-xl border border-primary/20 bg-primary/[0.03] space-y-2">
-                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider font-sora block">
-                    Verified Document Excerpt ({selectedSource.page})
-                  </span>
-                  <p className="text-foreground leading-relaxed italic">
-                    "{selectedSource.excerpt}"
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-lg bg-secondary/50 border border-border/60 text-muted-foreground flex items-center justify-between">
-                  <span>Document Type: <strong className="text-foreground">{selectedSource.type}</strong></span>
-                  <span className="text-primary flex items-center gap-1 text-[11px] font-medium">
-                    <span>Evidence-grounded</span>
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  </span>
+                </h4>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="text-[10px] font-mono">
+                    {selectedSource.authority}
+                  </Badge>
+                  {selectedSource.page && <span>• {selectedSource.page}</span>}
                 </div>
               </div>
 
-              <DialogFooter className="pt-2">
-                <DialogClose asChild>
-                  <Button variant="outline" size="sm">
-                    Close Source Inspector
-                  </Button>
-                </DialogClose>
-              </DialogFooter>
-            </>
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Extracted Evidence Chunk
+                </span>
+                <div className="p-3 rounded-xl bg-muted/30 border border-border/60 text-xs text-foreground/90 leading-relaxed max-h-48 overflow-y-auto">
+                  {selectedSource.excerpt}
+                </div>
+              </div>
+            </div>
           )}
+
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" size="sm">
+                Close
+              </Button>
+            </DialogClose>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* 4. MOBILE CONTEXT & SOURCES SHEET */}
-      <Sheet open={isMobilePanelOpen} onOpenChange={setIsMobilePanelOpen}>
-        <SheetContent side="right" className="w-80 sm:w-96 overflow-y-auto space-y-5 p-6">
-          <SheetHeader>
-            <SheetTitle className="font-sora text-base font-bold">Vaccination Context</SheetTitle>
-            <SheetDescription className="text-xs text-muted-foreground">
-              Current patient profile and verified guideline sources
-            </SheetDescription>
-          </SheetHeader>
-
-          <div className="space-y-4 text-xs">
-            <div className="space-y-1.5">
-              <Label className="font-semibold text-xs">Active Family Member</Label>
-              <Select value={selectedMemberId} onValueChange={setSelectedMemberId}>
-                <SelectTrigger className="text-xs h-9">
-                  <SelectValue placeholder="Member" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fam-1">Aarav (Son, 8 yrs)</SelectItem>
-                  <SelectItem value="fam-2">Anaya (Daughter, 4 yrs)</SelectItem>
-                  <SelectItem value="fam-3">Meera (Mother, 32 yrs)</SelectItem>
-                  <SelectItem value="fam-4">Raj (Father, 35 yrs)</SelectItem>
-                  <SelectItem value="ALL">Entire Family</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-secondary/50 border border-border/60 space-y-2">
-              <div className="flex justify-between font-bold text-foreground">
-                <span>{activeMember.name}</span>
-                <span>{activeMember.progress}% Coverage</span>
-              </div>
-              <p className="text-muted-foreground text-[11px]">
-                Next: {activeMember.nextVaccine?.name} ({activeMember.nextVaccine?.dueDate})
-              </p>
-            </div>
-
-            <Separator />
-
-            <div className="space-y-2">
-              <span className="font-bold text-foreground block font-sora">Trusted Sources</span>
-              <div className="space-y-2">
-                {DEFAULT_SOURCES_LIBRARY.map((src) => (
-                  <div
-                    key={src.id}
-                    onClick={() => {
-                      setIsMobilePanelOpen(false);
-                      handleOpenSourceModal(src);
-                    }}
-                    className="p-2.5 rounded-lg border border-border bg-card text-xs space-y-1 cursor-pointer"
-                  >
-                    <span className="font-semibold text-foreground block truncate">{src.title}</span>
-                    <span className="text-[10px] text-muted-foreground block">{src.organization}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
     </div>
   );
 }

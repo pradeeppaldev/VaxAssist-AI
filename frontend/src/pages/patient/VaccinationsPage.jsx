@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { familyApi, vaccinationApi, agentApi } from '@/services/api';
+import { useDemoMode } from '@/context/DemoModeContext';
 import {
   Syringe,
   Plus,
@@ -121,10 +122,11 @@ const ADMINISTRATION_SITES = [
 
 export default function VaccinationsPage() {
   const navigate = useNavigate();
+  const { isDemoMode, setDemoMode, demoStore, downloadDemoPdf } = useDemoMode();
 
   // State
-  const [records, setRecords] = useState(INITIAL_VACCINATION_RECORDS);
-  const [familyMembers, setFamilyMembers] = useState(INITIAL_FAMILY_MEMBERS);
+  const [records, setRecords] = useState(() => isDemoMode ? INITIAL_VACCINATION_RECORDS : []);
+  const [familyMembers, setFamilyMembers] = useState(() => isDemoMode ? (demoStore.familyMembers || []) : []);
   const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
   const [displayMode, setDisplayMode] = useState('table'); // 'table' | 'timeline'
 
@@ -147,71 +149,84 @@ export default function VaccinationsPage() {
   // Load family members & backend records
   useEffect(() => {
     let isMounted = true;
+    if (isDemoMode) {
+      setRecords(INITIAL_VACCINATION_RECORDS);
+      setFamilyMembers(demoStore.familyMembers || []);
+      return;
+    }
     const fetchBackendData = async () => {
       try {
         const famRes = await familyApi.getMembers();
-        if (isMounted && famRes?.data?.length > 0) {
-          const membersList = famRes.data.map((m) => ({
-            id: m.id,
-            name: m.full_name,
-            relationship: m.relationship,
-            age: m.date_of_birth ? `${Math.max(0, new Date().getFullYear() - new Date(m.date_of_birth).getFullYear())}y` : 'Family',
-          }));
-          setFamilyMembers(membersList);
+        if (isMounted) {
+          if (famRes?.data?.length > 0) {
+            const membersList = famRes.data.map((m) => ({
+              id: m.id,
+              name: m.full_name,
+              relationship: m.relationship,
+              age: m.date_of_birth ? `${Math.max(0, new Date().getFullYear() - new Date(m.date_of_birth).getFullYear())}y` : 'Family',
+            }));
+            setFamilyMembers(membersList);
 
-          // Load records for all family members
-          try {
-            const allRecResults = await Promise.allSettled(
-              membersList.map((m) => vaccinationApi.getMemberRecords(m.id))
-            );
-            const allFetchedRecords = [];
-            allRecResults.forEach((res, idx) => {
-              const currentMember = membersList[idx];
-              if (res.status === 'fulfilled' && res.value?.data?.length > 0) {
-                res.value.data.forEach((r) => {
-                  const dateObj = new Date(r.administered_date || Date.now());
-                  allFetchedRecords.push({
-                    id: r.id,
-                    vaccineName: r.vaccine_name,
-                    disease: r.vaccine_code || 'Immunization',
-                    dose: r.dose_name || `Dose ${r.dose_number}`,
-                    category: 'UIP Routine',
-                    memberId: r.family_member_id || currentMember.id,
-                    memberName: currentMember.name,
-                    memberRelation: currentMember.relationship,
-                    date: r.administered_date,
-                    formattedDate: isNaN(dateObj.getTime()) ? 'Verified' : dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-                    year: isNaN(dateObj.getTime()) ? 2026 : dateObj.getFullYear(),
-                    month: isNaN(dateObj.getTime()) ? 'Recent' : dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-                    status: 'COMPLETED',
-                    provider: r.healthcare_provider || 'Dr. Anjali Deshmukh',
-                    clinic: r.healthcare_provider || 'Lilavati Hospital & Research Centre, Mumbai',
-                    batchNumber: r.batch_number || 'BATCH-STD',
-                    site: 'Upper Arm / Deltoid',
-                    hasCertificate: true,
-                    certificateId: `CERT-${r.id ? r.id.slice(-6).toUpperCase() : 'VALID'}`,
-                    notes: r.notes || 'Officially verified dose record.',
-                    isOfflinePending: !!r.isOfflinePending,
+            // Load records for all family members
+            try {
+              const allRecResults = await Promise.allSettled(
+                membersList.map((m) => vaccinationApi.getMemberRecords(m.id))
+              );
+              const allFetchedRecords = [];
+              allRecResults.forEach((res, idx) => {
+                const currentMember = membersList[idx];
+                if (res.status === 'fulfilled' && res.value?.data?.length > 0) {
+                  res.value.data.forEach((r) => {
+                    const dateObj = new Date(r.administered_date || Date.now());
+                    allFetchedRecords.push({
+                      id: r.id,
+                      vaccineName: r.vaccine_name,
+                      disease: r.vaccine_code || 'Immunization',
+                      dose: r.dose_name || `Dose ${r.dose_number}`,
+                      category: 'UIP Routine',
+                      memberId: r.family_member_id || currentMember.id,
+                      memberName: currentMember.name,
+                      memberRelation: currentMember.relationship,
+                      date: r.administered_date,
+                      formattedDate: isNaN(dateObj.getTime()) ? 'Verified' : dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+                      year: isNaN(dateObj.getTime()) ? 2026 : dateObj.getFullYear(),
+                      month: isNaN(dateObj.getTime()) ? 'Recent' : dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                      status: 'COMPLETED',
+                      provider: r.healthcare_provider || 'Dr. Anjali Deshmukh',
+                      clinic: r.healthcare_provider || 'Community Health Clinic',
+                      batchNumber: r.batch_number || 'BATCH-STD',
+                      site: 'Upper Arm / Deltoid',
+                      hasCertificate: true,
+                      certificateId: `CERT-${r.id ? r.id.slice(-6).toUpperCase() : 'VALID'}`,
+                      notes: r.notes || 'Officially verified dose record.',
+                      isOfflinePending: !!r.isOfflinePending,
+                    });
                   });
-                });
+                }
+              });
+              if (isMounted) {
+                setRecords(allFetchedRecords);
               }
-            });
-            if (isMounted && allFetchedRecords.length > 0) {
-              setRecords(allFetchedRecords);
+            } catch (rErr) {
+              if (isMounted) setRecords([]);
             }
-          } catch (rErr) {
-            // keep initial records
+          } else {
+            setFamilyMembers([]);
+            setRecords([]);
           }
         }
       } catch (err) {
-        // keep initial mock records
+        if (isMounted) {
+          setFamilyMembers([]);
+          setRecords([]);
+        }
       }
     };
     fetchBackendData();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isDemoMode, demoStore.familyMembers]);
 
   // Form State for Add Record
   const [addForm, setAddForm] = useState({

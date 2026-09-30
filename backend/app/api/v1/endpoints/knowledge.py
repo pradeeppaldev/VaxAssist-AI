@@ -26,6 +26,8 @@ from app.schemas.knowledge import (
     KnowledgeDocumentUpdateRequest,
     KnowledgeDocumentStatusResponse,
     KnowledgeBaseMetricsResponse,
+    IngestionJobResponse,
+    ReindexCollectionResponse,
     RAGQueryRequest,
     RAGQueryResponse,
 )
@@ -74,7 +76,7 @@ async def upload_document(
 
     try:
         content = await file.read()
-        doc = await knowledge_service.upload_and_index_document(
+        doc = await knowledge_service.upload_and_create_document(
             filename=file.filename or "document.pdf",
             content=content,
             title=title,
@@ -84,10 +86,11 @@ async def upload_document(
             source_authority=source_authority,
             source_url=source_url,
             publication_date=pub_date,
+            run_synchronously=False,
         )
         return APIResponse[KnowledgeDocumentResponse](
             success=True,
-            message="Knowledge document uploaded and indexed successfully into ChromaDB.",
+            message="Knowledge document uploaded. Ingestion job started in background.",
             data=KnowledgeDocumentResponse(**doc),
         )
     except ValueError as val_err:
@@ -95,20 +98,10 @@ async def upload_document(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(val_err),
         )
-    except GeminiAPIKeyMissingError as key_err:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(key_err),
-        )
-    except GeminiAPIError as api_err:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Gemini API error during embedding generation: {str(api_err)}",
-        )
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process and index document: {str(exc)}",
+            detail=f"Failed to process and upload document: {str(exc)}",
         )
 
 
@@ -268,6 +261,85 @@ async def reindex_document(
 
 
 @router.get(
+    "/jobs/{job_id}",
+    response_model=APIResponse[IngestionJobResponse],
+    summary="Get background ingestion job progress (Admin only)",
+)
+async def get_job_status(
+    job_id: str = Path(..., description="Ingestion Job ID"),
+    current_user: dict = Depends(require_admin),
+):
+    """Retrieves live stage, batch progress, and error information for an ingestion job."""
+    job = knowledge_service.get_job_status(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Ingestion job '{job_id}' not found.",
+        )
+    return APIResponse[IngestionJobResponse](
+        success=True,
+        message=f"Job status: {job['status']} ({job['stage']})",
+        data=IngestionJobResponse(**job),
+    )
+
+
+@router.post(
+    "/documents/{document_id}/retry",
+    response_model=APIResponse[KnowledgeDocumentResponse],
+    summary="Retry indexing a document from disk (Admin only)",
+)
+async def retry_document_indexing(
+    document_id: str = Path(..., description="Knowledge document ID"),
+    current_user: dict = Depends(require_admin),
+):
+    """
+    Retries parsing, embedding, and indexing a document using the stored file on disk.
+    Avoids re-uploading the file and purges any incomplete vectors before indexing.
+    """
+    try:
+        doc = await knowledge_service.retry_document_indexing(document_id, run_synchronously=False)
+        return APIResponse[KnowledgeDocumentResponse](
+            success=True,
+            message="Document indexing retry started in background.",
+            data=KnowledgeDocumentResponse(**doc),
+        )
+    except ValueError as val_err:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
+    except FileNotFoundError as fnf:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(fnf))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Retry initiation failed: {str(exc)}",
+        )
+
+
+@router.post(
+    "/reindex-collection",
+    response_model=APIResponse[ReindexCollectionResponse],
+    summary="Re-index entire ChromaDB knowledge collection (Admin only)",
+)
+async def reindex_collection(
+    current_user: dict = Depends(require_admin),
+):
+    """
+    Re-indexes all knowledge documents in the database using their stored files on disk.
+    """
+    try:
+        metrics = await knowledge_service.reindex_all_documents()
+        return APIResponse[ReindexCollectionResponse](
+            success=True,
+            message="ChromaDB knowledge collection re-indexing completed.",
+            data=ReindexCollectionResponse(**metrics),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Collection re-indexing failed: {str(exc)}",
+        )
+
+
+@router.get(
     "/documents/{document_id}/status",
     response_model=APIResponse[KnowledgeDocumentStatusResponse],
     summary="Check document indexing status (Admin only)",
@@ -290,6 +362,8 @@ async def get_document_status(
             id=doc["id"],
             title=doc["title"],
             status=doc["status"],
+            stage=doc["status"],
+            progress_percent=100 if doc["status"] == DocumentStatus.INDEXED.value else 0,
             chunk_count=doc.get("chunk_count", 0),
             index_version=doc.get("index_version", 1),
             error_message=doc.get("error_message"),

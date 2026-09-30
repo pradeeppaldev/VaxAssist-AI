@@ -72,6 +72,12 @@ import {
 // Guards
 import ProtectedRoute from '../components/auth/ProtectedRoute';
 import RoleRoute from '../components/auth/RoleRoute';
+import { useAuth } from '../context/AuthContext';
+
+function DashboardRedirect() {
+  const { getDashboardPath } = useAuth();
+  return <Navigate to={getDashboardPath()} replace />;
+}
 
 export default function AppRoutes() {
   return (
@@ -114,7 +120,7 @@ export default function AppRoutes() {
             </RoleRoute>
           }
         />
-        <Route path="/dashboard" element={<Navigate to="/patient/dashboard" replace />} />
+        <Route path="/dashboard" element={<DashboardRedirect />} />
         <Route path="/patient" element={<Navigate to="/patient/dashboard" replace />} />
         <Route path="/family/dashboard" element={<Navigate to="/patient/dashboard" replace />} />
         

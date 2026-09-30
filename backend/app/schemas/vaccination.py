@@ -84,6 +84,7 @@ class ScheduledDoseResponse(BaseModel):
     recommended_date: date
     calculated_due_date: date
     status: VaccinationStatus
+    days_overdue: Optional[int] = 0
     administered_date: Optional[date] = None
     record_id: Optional[str] = None
     status_reason: str

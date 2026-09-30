@@ -1,6 +1,5 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { 
   ShieldCheck, 
   Sparkles, 
@@ -18,57 +17,30 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 /**
- * DockSidebarItem: Single sidebar menu item with Dock-style magnification physics.
- * Scales subtly and nudges right when hovered, with nearby items responding proportionally.
+ * DockSidebarItem: Single sidebar menu item with smooth interactive hover feedback.
+ * Provides subtle icon magnification and slight lateral accent without displacing click hit-targets.
  */
-function DockSidebarItem({ item, isActive, isAI, onNavClick, mouseY }) {
-  const itemRef = useRef(null);
+function DockSidebarItem({ item, isActive, isAI, onNavClick }) {
   const Icon = item.icon;
 
-  // Calculate distance between mouse Y and vertical center of this item
-  const distance = useTransform(mouseY, (val) => {
-    const bounds = itemRef.current?.getBoundingClientRect();
-    if (!bounds || val === Infinity) return 999;
-    const itemCenter = bounds.top + bounds.height / 2;
-    return val - itemCenter;
-  });
-
-  const springConfig = { mass: 0.1, stiffness: 260, damping: 18 };
-
-  // Subtle magnification scale for container
-  const targetScale = useTransform(distance, [-85, 0, 85], [1, 1.04, 1]);
-  const scale = useSpring(targetScale, springConfig);
-
-  // Icon magnification (subtly grows when focused)
-  const targetIconScale = useTransform(distance, [-85, 0, 85], [1, 1.25, 1]);
-  const iconScale = useSpring(targetIconScale, springConfig);
-
-  // Subtle horizontal displacement towards the right
-  const targetX = useTransform(distance, [-85, 0, 85], [0, 4, 0]);
-  const x = useSpring(targetX, springConfig);
-
   return (
-    <motion.div
-      ref={itemRef}
-      style={{ scale, x, transformOrigin: 'left center' }}
-      className="origin-left"
-    >
+    <div className="w-full">
       <NavLink
         to={item.href}
         onClick={onNavClick}
         className={({ isActive: navActive }) => {
           const active = navActive || isActive;
           return cn(
-            "group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-colors duration-150 relative",
+            "group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all duration-150 relative select-none",
             active
               ? "bg-primary/10 text-primary font-semibold shadow-2xs border-l-3 border-l-primary"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/60",
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/60 hover:translate-x-1",
             isAI && !active && "hover:border-primary/30"
           );
         }}
       >
         <div className="flex items-center gap-3">
-          <motion.div style={{ scale: iconScale }} className="origin-center">
+          <div className="origin-center transition-transform duration-150 group-hover:scale-110">
             <Icon
               className={cn(
                 "h-4 w-4 shrink-0 transition-colors",
@@ -79,7 +51,7 @@ function DockSidebarItem({ item, isActive, isAI, onNavClick, mouseY }) {
                   : "text-muted-foreground group-hover:text-foreground"
               )}
             />
-          </motion.div>
+          </div>
           <span className={cn(isAI && "font-sora tracking-tight font-medium")}>
             {item.title}
           </span>
@@ -91,14 +63,13 @@ function DockSidebarItem({ item, isActive, isAI, onNavClick, mouseY }) {
           </span>
         )}
       </NavLink>
-    </motion.div>
+    </div>
   );
 }
 
 export function AppSidebar({ className, onNavClick }) {
   const { user, logout } = useAuth();
   const location = useLocation();
-  const mouseY = useMotionValue(Infinity);
 
   const role = user?.role || 'PATIENT';
   const roleConfig = ROLE_NAVIGATION[role] || ROLE_NAVIGATION.PATIENT;
@@ -125,12 +96,8 @@ export function AppSidebar({ className, onNavClick }) {
         </div>
       </div>
 
-      {/* Main Menu with Dock-Style Interactive Magnification */}
-      <div
-        className="flex-1 overflow-y-auto px-3 py-4 space-y-1 relative"
-        onMouseMove={(e) => mouseY.set(e.clientY)}
-        onMouseLeave={() => mouseY.set(Infinity)}
-      >
+      {/* Main Menu */}
+      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1 relative">
         <div className="text-[11px] font-semibold text-muted-foreground px-3 mb-2 uppercase tracking-wider font-mono">
           Main Menu
         </div>
@@ -146,7 +113,6 @@ export function AppSidebar({ className, onNavClick }) {
               isActive={isActive}
               isAI={isAI}
               onNavClick={onNavClick}
-              mouseY={mouseY}
             />
           );
         })}

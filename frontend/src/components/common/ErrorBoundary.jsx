@@ -17,9 +17,15 @@ export class ErrorBoundary extends React.Component {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
+  componentDidUpdate(prevProps) {
+    // Automatically reset error boundary when navigating to another route
+    if (this.state.hasError && this.props.resetKey !== prevProps.resetKey) {
+      this.setState({ hasError: false, error: null });
+    }
+  }
+
   handleReset = () => {
     this.setState({ hasError: false, error: null });
-    window.location.reload();
   };
 
   render() {
@@ -36,7 +42,7 @@ export class ErrorBoundary extends React.Component {
                   Something unexpected happened
                 </h3>
                 <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                  The clinical workspace encountered a display error. You can try refreshing the page or navigating back to your dashboard.
+                  The clinical workspace encountered a display error. You can try recovering this view or navigating to another section from the sidebar.
                 </p>
                 {this.state.error?.message && (
                   <p className="text-[11px] font-mono text-destructive/80 bg-background/80 p-2 rounded border border-destructive/20 mt-2 text-left truncate">
@@ -47,9 +53,20 @@ export class ErrorBoundary extends React.Component {
               <div className="pt-2 flex justify-center gap-3">
                 <Button size="sm" onClick={this.handleReset} className="gap-2">
                   <RotateCcw className="h-3.5 w-3.5" />
-                  <span>Reload Page</span>
+                  <span>Try Again</span>
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => window.location.href = '/patient/dashboard'}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    this.setState({ hasError: false, error: null });
+                    if (this.props.onNavigateDashboard) {
+                      this.props.onNavigateDashboard();
+                    } else {
+                      window.location.href = '/patient/dashboard';
+                    }
+                  }}
+                >
                   Back to Dashboard
                 </Button>
               </div>

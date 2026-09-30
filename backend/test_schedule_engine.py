@@ -228,7 +228,8 @@ def test_schedule_engine_suite():
 
     # Case: 18-year-old adolescent / adult (~6600 days old, past 365-day grace period)
     dob_18y = today - timedelta(days=6600)
-    res_18y = calculate_member_schedule(date_of_birth=dob_18y, existing_records=[], reference_date=today)
+    rec_td10 = [{"vaccine_code": "TD_10Y", "dose_number": 1, "administered_date": dob_18y + timedelta(days=3650)}]
+    res_18y = calculate_member_schedule(date_of_birth=dob_18y, existing_records=rec_td10, reference_date=today)
     items_18y = res_18y["schedule_items"]
 
     # Td-16: Has NO arbitrary maximum age cutoff! Must NOT be falsely marked MISSED

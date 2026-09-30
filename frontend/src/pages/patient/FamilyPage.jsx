@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { familyApi } from '@/services/api';
+import { familyApi, vaccinationApi } from '@/services/api';
+import { useDemoMode } from '@/context/DemoModeContext';
 import {
   Users,
   UserPlus,
@@ -84,9 +85,10 @@ import {
 
 export default function FamilyPage() {
   const navigate = useNavigate();
+  const { isDemoMode, setDemoMode, demoStore, addDemoMember, updateDemoMember, deleteDemoMember } = useDemoMode();
 
   // State Management
-  const [members, setMembers] = useState(INITIAL_FAMILY_MEMBERS);
+  const [members, setMembers] = useState(() => isDemoMode ? (demoStore.familyMembers || []) : []);
   const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'ATTENTION' | 'CHILDREN' | 'ADULTS' | 'COMPLETED'
@@ -163,7 +165,7 @@ export default function FamilyPage() {
   };
 
   // Backend to UI Mappers
-  const mapBackendMemberToUi = (m) => {
+  const mapBackendMemberToUi = (m, schData = null) => {
     const birthYear = m.date_of_birth ? new Date(m.date_of_birth).getFullYear() : new Date().getFullYear();
     const ageYears = Math.max(0, new Date().getFullYear() - birthYear);
     const isChild = ageYears < 18 || m.relationship === 'CHILD';
@@ -174,6 +176,52 @@ export default function FamilyPage() {
       .slice(0, 2)
       .join('')
       .toUpperCase() || 'FM';
+
+    const summary = schData?.summary || {};
+    const items = schData?.schedule_items || [];
+    const completedDoses = summary.completed_count ?? 0;
+    const totalDoses = summary.total_doses ?? (completedDoses > 0 ? completedDoses : 10);
+    const progress = summary.completion_percentage ?? (totalDoses > 0 ? Math.round((completedDoses / totalDoses) * 100) : 0);
+    const overdueCount = summary.overdue_count ?? 0;
+    const upcomingCount = summary.upcoming_count ?? 0;
+    const needsAttention = overdueCount > 0;
+
+    let nextVaccine = {
+      name: 'All Scheduled Doses Complete',
+      dueDate: 'Up to Date',
+      relative: 'Up to Date',
+      status: 'COMPLETED',
+      clinic: m.notes || 'Primary Health Center',
+      category: 'Routine',
+      notes: 'All national immunization schedule requirements are currently satisfied.',
+    };
+
+    const nextPending = items.find((i) => i.status === 'OVERDUE' || i.status === 'DUE') || items.find((i) => i.status === 'UPCOMING');
+    if (nextPending) {
+      const dStr = nextPending.calculated_due_date || nextPending.recommended_date;
+      const dObj = new Date(dStr);
+      nextVaccine = {
+        name: nextPending.vaccine_name || nextPending.vaccine_code,
+        dueDate: isNaN(dObj.getTime()) ? dStr : dObj.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' }),
+        relative: nextPending.status === 'OVERDUE' ? 'Overdue' : 'Upcoming',
+        status: nextPending.status,
+        clinic: m.notes || 'Community Health Center',
+        category: nextPending.category || 'Routine UIP',
+        notes: nextPending.notes || nextPending.catch_up_notes || 'National Immunization Schedule guideline.',
+      };
+    }
+
+    const statusVal = m.isOfflinePending
+      ? 'SYNC_PENDING'
+      : (overdueCount > 0 ? 'OVERDUE' : (progress === 100 ? 'COMPLETED' : 'UPCOMING'));
+
+    const statusLabel = m.isOfflinePending
+      ? 'Sync Pending'
+      : (overdueCount > 0 ? `${overdueCount} Overdue` : (progress === 100 ? 'All Up to Date' : 'Active Schedule'));
+
+    const statusVariant = m.isOfflinePending
+      ? 'warning'
+      : (overdueCount > 0 ? 'overdue' : (progress === 100 ? 'success' : 'secondary'));
 
     return {
       id: m.id,
@@ -193,28 +241,20 @@ export default function FamilyPage() {
       avatarBg: isChild
         ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
         : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-      progress: 75,
-      completedDoses: 8,
-      totalDoses: 10,
-      upcomingCount: 1,
-      overdueCount: 0,
+      progress,
+      completedDoses,
+      totalDoses,
+      upcomingCount,
+      overdueCount,
       isOfflinePending: !!m.isOfflinePending,
-      status: m.isOfflinePending ? 'SYNC_PENDING' : 'UPCOMING',
-      statusLabel: m.isOfflinePending ? 'Sync Pending' : 'Active Schedule',
-      statusVariant: m.isOfflinePending ? 'warning' : 'secondary',
-      needsAttention: false,
-      attentionReason: null,
-      nextVaccine: {
-        name: 'Routine Health & Immunization Check',
-        dueDate: 'Within 30 Days',
-        relative: 'Scheduled',
-        status: 'UPCOMING',
-        clinic: m.notes || 'Primary Health Center',
-        category: 'Routine',
-        notes: 'Clinical immunization schedule verified.',
-      },
+      status: statusVal,
+      statusLabel,
+      statusVariant,
+      needsAttention,
+      attentionReason: overdueCount > 0 ? `${overdueCount} overdue vaccination milestone${overdueCount > 1 ? 's' : ''}` : null,
+      nextVaccine,
       vaccinationHistory: [],
-      upcomingSchedule: [],
+      upcomingSchedule: items,
       activityLog: [
         {
           id: `act-${m.id}-1`,
@@ -243,25 +283,40 @@ export default function FamilyPage() {
     return 'OTHER';
   };
 
-  // Fetch family members from backend on mount
+  // Fetch family members from backend or demo store on mount or mode switch
   useEffect(() => {
     let isMounted = true;
+    if (isDemoMode) {
+      setMembers(demoStore.familyMembers || []);
+      return;
+    }
     const loadMembers = async () => {
       try {
         const res = await familyApi.getMembers();
-        if (isMounted && res && res.data && res.data.length > 0) {
-          const mapped = res.data.map(mapBackendMemberToUi);
-          setMembers(mapped);
+        if (isMounted) {
+          if (res?.data && res.data.length > 0) {
+            const schResults = await Promise.allSettled(
+              res.data.map((m) => vaccinationApi.getMemberSchedule(m.id))
+            );
+            const mapped = res.data.map((m, idx) => {
+              const schData = schResults[idx]?.status === 'fulfilled' ? schResults[idx].value?.data : null;
+              return mapBackendMemberToUi(m, schData);
+            });
+            setMembers(mapped);
+          } else {
+            setMembers([]);
+          }
         }
       } catch (err) {
-        console.warn('Could not fetch family members from backend, using fallback data:', err);
+        console.warn('Could not fetch family members from backend:', err);
+        if (isMounted) setMembers([]);
       }
     };
     loadMembers();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isDemoMode, demoStore.familyMembers]);
 
   // Add Member Submit
   const handleAddSubmit = async (e) => {
@@ -274,21 +329,36 @@ export default function FamilyPage() {
 
     setFormErrors({});
 
-    // Approximate age calculation for demo
-    const birthYear = new Date(formData.dob).getFullYear();
-    const currentYear = new Date().getFullYear();
-    const ageYears = Math.max(0, currentYear - birthYear);
-    const isChild = ageYears < 18;
+    if (isDemoMode) {
+      addDemoMember({
+        name: formData.name.trim(),
+        relationship: formData.relationship,
+        dob: formData.dob,
+        gender: formData.gender,
+        bloodGroup: formData.bloodGroup,
+        phone: formData.phone.trim(),
+        email: formData.email.trim(),
+        allergies: formData.allergies.trim(),
+        primaryClinic: formData.primaryClinic.trim(),
+      });
+      setIsAddModalOpen(false);
+      setFormData({
+        name: '',
+        relationship: 'Son',
+        dob: '',
+        gender: 'Male',
+        bloodGroup: 'O+',
+        phone: '',
+        email: '',
+        allergies: '',
+        primaryClinic: '',
+      });
+      setAlertNotice(`Successfully registered ${formData.name} (Demo Sandbox).`);
+      setTimeout(() => setAlertNotice(null), 4000);
+      return;
+    }
 
-    const initials = formData.name
-      .split(' ')
-      .filter(Boolean)
-      .map((n) => n[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || 'FM';
-
-    let createdMember = null;
+    // Live Mode: call FastAPI backend
     try {
       const payload = {
         full_name: formData.name.trim(),
@@ -301,90 +371,28 @@ export default function FamilyPage() {
       };
       const res = await familyApi.addMember(payload);
       if (res?.data) {
-        createdMember = mapBackendMemberToUi(res.data);
+        const createdMember = mapBackendMemberToUi(res.data);
+        setMembers((prev) => [createdMember, ...prev]);
+        setIsAddModalOpen(false);
+        setFormData({
+          name: '',
+          relationship: 'Son',
+          dob: '',
+          gender: 'Male',
+          bloodGroup: 'O+',
+          phone: '',
+          email: '',
+          allergies: '',
+          primaryClinic: '',
+        });
+        setAlertNotice(`Successfully registered ${createdMember.name} to your family!`);
+        setTimeout(() => setAlertNotice(null), 4000);
       }
     } catch (err) {
-      console.warn('Backend add member failed, falling back to local creation:', err);
+      console.error('Backend add member failed:', err);
+      setAlertNotice(`Failed to add member to database: ${err.message || 'Server error'}`);
+      setTimeout(() => setAlertNotice(null), 5000);
     }
-
-    if (!createdMember) {
-      createdMember = {
-        id: `fam-${Date.now()}`,
-        name: formData.name.trim(),
-        relationship: formData.relationship,
-        age: `${ageYears} year${ageYears === 1 ? '' : 's'}`,
-        dob: formData.dob,
-        gender: formData.gender,
-        bloodGroup: formData.bloodGroup || 'Unknown',
-        isChild,
-        phone: formData.phone.trim(),
-        email: formData.email.trim(),
-        allergies: formData.allergies.trim() || 'No known allergies reported',
-        primaryClinic: formData.primaryClinic.trim() || 'Community Health Center',
-        pediatrician: isChild ? 'Assigned Pediatrician' : 'General Practitioner',
-        avatarFallback: initials,
-        avatarBg: isChild
-          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-        progress: 0,
-        completedDoses: 0,
-        totalDoses: isChild ? 12 : 5,
-        upcomingCount: 1,
-        overdueCount: 0,
-        status: 'UPCOMING',
-        statusLabel: 'Schedule Initialized',
-        statusVariant: 'secondary',
-        needsAttention: false,
-        attentionReason: null,
-        nextVaccine: {
-          name: isChild ? 'Primary Immunization Schedule (UIP)' : 'Routine Adult Health Review',
-          dueDate: 'Within 30 Days',
-          relative: 'Pending assessment',
-          status: 'UPCOMING',
-          clinic: formData.primaryClinic || 'Primary Health Center',
-          category: 'New Profile',
-          notes: 'Initial clinical assessment recommended.',
-        },
-        vaccinationHistory: [],
-        upcomingSchedule: [
-          {
-            id: `sch-${Date.now()}-1`,
-            vaccineName: isChild ? 'Universal Immunization Baseline' : 'Annual Health & Td Check',
-            targetAge: 'Baseline',
-            dueDate: 'Upcoming',
-            status: 'UPCOMING',
-            timeElapsed: 'Pending review',
-            description: 'Awaiting primary dose record synchronization.',
-          },
-        ],
-        activityLog: [
-          {
-            id: `act-${Date.now()}-1`,
-            title: 'Family member registered',
-            date: 'Just now',
-            description: 'Profile created and initialized under family account.',
-            type: 'profile',
-          },
-        ],
-      };
-    }
-
-    setMembers((prev) => [createdMember, ...prev]);
-    setIsAddModalOpen(false);
-    setFormData({
-      name: '',
-      relationship: 'Son',
-      dob: '',
-      gender: 'Male',
-      bloodGroup: 'O+',
-      phone: '',
-      email: '',
-      allergies: '',
-      primaryClinic: '',
-    });
-
-    setAlertNotice(`Successfully registered ${createdMember.name} to your family!`);
-    setTimeout(() => setAlertNotice(null), 4000);
   };
 
   // Open Edit Modal
@@ -405,6 +413,21 @@ export default function FamilyPage() {
       return;
     }
 
+    if (isDemoMode) {
+      updateDemoMember(editingMember.id, {
+        name: editingMember.name,
+        gender: editingMember.gender,
+        relationship: editingMember.relationship,
+        bloodGroup: editingMember.bloodGroup,
+        allergies: editingMember.allergies,
+        primaryClinic: editingMember.primaryClinic,
+      });
+      setIsEditModalOpen(false);
+      setAlertNotice(`Updated profile for ${editingMember.name} (Demo Sandbox).`);
+      setTimeout(() => setAlertNotice(null), 4000);
+      return;
+    }
+
     try {
       const payload = {
         full_name: editingMember.name,
@@ -417,33 +440,43 @@ export default function FamilyPage() {
         notes: editingMember.primaryClinic || undefined,
       };
       await familyApi.updateMember(editingMember.id, payload);
+      setMembers((prev) =>
+        prev.map((m) => (m.id === editingMember.id ? { ...editingMember } : m))
+      );
+      setIsEditModalOpen(false);
+      setAlertNotice(`Updated profile for ${editingMember.name}.`);
+      setTimeout(() => setAlertNotice(null), 4000);
     } catch (err) {
-      console.warn('Backend update member failed, updating local state only:', err);
+      console.error('Backend update member error:', err);
+      setAlertNotice(`Update failed: ${err.message || 'Server error'}`);
+      setTimeout(() => setAlertNotice(null), 5000);
     }
-
-    setMembers((prev) =>
-      prev.map((m) => (m.id === editingMember.id ? { ...editingMember } : m))
-    );
-
-    setIsEditModalOpen(false);
-    setAlertNotice(`Updated profile for ${editingMember.name}.`);
-    setTimeout(() => setAlertNotice(null), 4000);
   };
 
   // Confirm Delete
   const handleConfirmDelete = async () => {
     if (!deleteCandidate) return;
 
-    try {
-      await familyApi.deleteMember(deleteCandidate.id);
-    } catch (err) {
-      console.warn('Backend delete member failed, removing locally:', err);
+    if (isDemoMode) {
+      deleteDemoMember(deleteCandidate.id);
+      setAlertNotice(`Removed ${deleteCandidate.name} from family group (Demo Sandbox).`);
+      setDeleteCandidate(null);
+      setTimeout(() => setAlertNotice(null), 4000);
+      return;
     }
 
-    setMembers((prev) => prev.filter((m) => m.id !== deleteCandidate.id));
-    setAlertNotice(`Removed ${deleteCandidate.name} from family group.`);
-    setDeleteCandidate(null);
-    setTimeout(() => setAlertNotice(null), 4000);
+    try {
+      await familyApi.deleteMember(deleteCandidate.id);
+      setMembers((prev) => prev.filter((m) => m.id !== deleteCandidate.id));
+      setAlertNotice(`Removed ${deleteCandidate.name} from live family registry.`);
+      setDeleteCandidate(null);
+      setTimeout(() => setAlertNotice(null), 4000);
+    } catch (err) {
+      console.error('Backend delete member failed:', err);
+      setAlertNotice(`Failed to remove member: ${err.message || 'Server error'}`);
+      setDeleteCandidate(null);
+      setTimeout(() => setAlertNotice(null), 5000);
+    }
   };
 
   // ==========================================

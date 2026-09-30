@@ -154,7 +154,62 @@ export function AdminKnowledgeBasePage() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState('');
   const [uploadStepText, setUploadStepText] = useState('');
+  const [uploadError, setUploadError] = useState(null);
+  const [activeJobId, setActiveJobId] = useState(null);
+  const [activeDocId, setActiveDocId] = useState(null);
+  const pollingRef = useRef(null);
+
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const pollJobStatus = (jobId, docTitle, documentId) => {
+    stopPolling();
+    setActiveJobId(jobId);
+    setActiveDocId(documentId);
+    setIsUploading(true);
+    setUploadError(null);
+
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await knowledgeApi.getJobStatus(jobId);
+        const job = res?.data;
+        if (!job) return;
+
+        setUploadStage(job.stage || 'EMBEDDING');
+        setUploadProgress(job.progress_percent || 0);
+        setUploadStepText(job.stage_description || 'Processing document...');
+
+        if (job.status === 'COMPLETED') {
+          stopPolling();
+          setUploadProgress(100);
+          setUploadStepText('Vector indexing successfully completed!');
+          await loadBackendDocuments();
+          setTimeout(() => {
+            setIsUploading(false);
+            setUploadDialogOpen(false);
+            setSelectedFile(null);
+            setToastNotice(`"${docTitle}" successfully uploaded and indexed in ChromaDB!`);
+          }, 1200);
+        } else if (job.status === 'FAILED') {
+          stopPolling();
+          setUploadError(job.error_message || 'Indexing failed. Please check Gemini API or rate limits.');
+          await loadBackendDocuments();
+        }
+      } catch (err) {
+        console.warn('Error polling job status:', err);
+      }
+    }, 850);
+  };
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, []);
 
   // Load backend documents on mount
   const loadBackendDocuments = async () => {
@@ -176,6 +231,7 @@ export function AdminKnowledgeBasePage() {
             version: `v1.${d.index_version || 1}`,
             status: d.status === 'INDEXED' ? 'ACTIVE' : d.status,
             indexingStatus: d.status,
+            failureReason: d.last_indexing_error || d.error_message,
             chunksCount: d.chunk_count || 0,
             uploadedAt: d.created_at,
             uploadedAgo: 'Recently',
@@ -278,23 +334,14 @@ export function AdminKnowledgeBasePage() {
       return;
     }
     setIsReindexingAll(true);
-    setReindexProgress(10);
+    setReindexProgress(15);
     setReindexStatusText('Initiating ChromaDB collection re-indexing...');
-    let successCount = 0;
     try {
-      for (let i = 0; i < documents.length; i++) {
-        const d = documents[i];
-        setReindexStatusText(`Re-indexing document ${i + 1}/${documents.length}: "${d.title || d.filename}"...`);
-        try {
-          await knowledgeApi.reindexDocument(d.id);
-          successCount++;
-        } catch (e) {
-          console.warn(`Failed to re-index document ${d.id}:`, e);
-        }
-        setReindexProgress(Math.round(((i + 1) / documents.length) * 100));
-      }
+      const resp = await knowledgeApi.reindexCollection();
+      setReindexProgress(100);
       await loadBackendDocuments();
-      setToastNotice(`Collection re-indexing complete: ${successCount} of ${documents.length} document(s) successfully re-indexed in ChromaDB with Gemini Embedding 2.`);
+      const count = resp?.data?.reindexed_count || documents.length;
+      setToastNotice(`Collection re-indexing complete: ${count} document(s) successfully re-indexed in ChromaDB with Gemini Embedding 2.`);
     } catch (err) {
       setToastNotice(`Re-indexing encountered an error: ${err.message || 'Unknown error'}`);
     } finally {
@@ -302,12 +349,48 @@ export function AdminKnowledgeBasePage() {
     }
   };
 
+  const handleRetryDocument = async (doc) => {
+    setToastNotice(`Retrying indexing for "${doc.filename}" from disk...`);
+    try {
+      const res = await knowledgeApi.retryIndexDocument(doc.id);
+      const newJobId = res?.data?.job_id;
+      if (newJobId) {
+        setUploadForm((prev) => ({
+          ...prev,
+          title: doc.title,
+          filename: doc.filename,
+        }));
+        setUploadDialogOpen(true);
+        pollJobStatus(newJobId, doc.title, doc.id);
+      } else {
+        await loadBackendDocuments();
+        setToastNotice(`Retry initiated for "${doc.filename}".`);
+      }
+    } catch (err) {
+      setToastNotice(`Retry failed: ${err.message || 'Error communicating with backend'}`);
+    }
+  };
+
   const handleReindexSingleDocument = async (doc) => {
+    if (doc.indexingStatus === 'FAILED') {
+      return handleRetryDocument(doc);
+    }
     setToastNotice(`Re-indexing initiated for "${doc.filename}". Re-vectorizing chunks with Gemini Embedding 2...`);
     try {
-      await knowledgeApi.reindexDocument(doc.id);
-      await loadBackendDocuments();
-      setToastNotice(`Completed re-indexing for "${doc.filename}". ChromaDB vectors updated.`);
+      const res = await knowledgeApi.reindexDocument(doc.id);
+      const newJobId = res?.data?.job_id;
+      if (newJobId) {
+        setUploadForm((prev) => ({
+          ...prev,
+          title: doc.title,
+          filename: doc.filename,
+        }));
+        setUploadDialogOpen(true);
+        pollJobStatus(newJobId, doc.title, doc.id);
+      } else {
+        await loadBackendDocuments();
+        setToastNotice(`Completed re-indexing for "${doc.filename}". ChromaDB vectors updated.`);
+      }
     } catch (err) {
       console.error('Re-index error:', err);
       setToastNotice(`Re-indexing failed for "${doc.filename}": ${err.message || 'Error communicating with backend'}`);
@@ -452,7 +535,7 @@ export function AdminKnowledgeBasePage() {
         badge={
           <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/15 font-mono text-xs flex items-center gap-1.5">
             <Sparkles className="h-3 w-3 text-primary" />
-            <span>RAG Grounding &bull; text-embedding-004</span>
+            <span>RAG Grounding &bull; gemini-embedding-2 (3072 dim)</span>
           </Badge>
         }
         actions={
@@ -597,9 +680,9 @@ export function AdminKnowledgeBasePage() {
               <span className="text-[11px] text-muted-foreground uppercase font-mono">Embedding Model</span>
               <div className="font-semibold text-foreground flex items-center gap-1.5">
                 <Cpu className="h-3.5 w-3.5 text-primary" />
-                <span className="truncate">text-embedding-004</span>
+                <span className="truncate">gemini-embedding-2</span>
               </div>
-              <p className="text-[10.5px] text-muted-foreground font-mono">768-dim embeddings</p>
+              <p className="text-[10.5px] text-muted-foreground font-mono">3072-dim embeddings</p>
             </div>
 
             <div className="space-y-1">
@@ -872,16 +955,29 @@ export function AdminKnowledgeBasePage() {
                               <span>View</span>
                             </Button>
 
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleReindexSingleDocument(doc)}
-                              className="h-8 px-2 text-xs gap-1 text-primary hover:bg-primary/10"
-                              title="Re-index this document"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                              <span>Re-index</span>
-                            </Button>
+                            {doc.indexingStatus === 'FAILED' ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRetryDocument(doc)}
+                                className="h-8 px-2.5 text-xs gap-1 border-rose-500/40 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-medium"
+                                title="Retry indexing this document from disk"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5 text-rose-500" />
+                                <span>Retry</span>
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleReindexSingleDocument(doc)}
+                                className="h-8 px-2 text-xs gap-1 text-primary hover:bg-primary/10"
+                                title="Re-index this document"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                <span>Re-index</span>
+                              </Button>
+                            )}
 
                             <Button
                               variant="ghost"
@@ -938,15 +1034,27 @@ export function AdminKnowledgeBasePage() {
                         <Eye className="h-3.5 w-3.5" />
                         <span>Inspect Details</span>
                       </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => handleOpenDetails(doc, 'chunks')}
-                        className="flex-1 text-xs gap-1.5 h-8"
-                      >
-                        <Layers className="h-3.5 w-3.5 text-primary" />
-                        <span>Chunks ({doc.chunksCount})</span>
-                      </Button>
+                      {doc.indexingStatus === 'FAILED' ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRetryDocument(doc)}
+                          className="flex-1 text-xs gap-1.5 h-8 border-rose-500/40 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 font-medium"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5 text-rose-500" />
+                          <span>Retry Indexing</span>
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => handleOpenDetails(doc, 'chunks')}
+                          className="flex-1 text-xs gap-1.5 h-8"
+                        >
+                          <Layers className="h-3.5 w-3.5 text-primary" />
+                          <span>Chunks ({doc.chunksCount})</span>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -997,7 +1105,17 @@ export function AdminKnowledgeBasePage() {
       </Card>
 
       {/* 5. Upload Document Dialog / Sheet */}
-      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+      <Dialog
+        open={uploadDialogOpen}
+        onOpenChange={(open) => {
+          setUploadDialogOpen(open);
+          if (!open) {
+            stopPolling();
+            setUploadError(null);
+            setIsUploading(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-xl max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
@@ -1009,17 +1127,80 @@ export function AdminKnowledgeBasePage() {
             </DialogDescription>
           </DialogHeader>
 
-          {isUploading ? (
+          {uploadError ? (
+            <div className="py-6 space-y-4 text-center">
+              <div className="p-3.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 w-14 h-14 mx-auto flex items-center justify-center">
+                <AlertTriangle className="h-7 w-7" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h4 className="font-bold text-sm text-foreground">Indexing Incomplete or Rate Limited</h4>
+                <p className="text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/30 p-3 rounded-lg border border-rose-200 dark:border-rose-900/50 font-mono text-left break-words">
+                  {uploadError}
+                </p>
+                <p className="text-[11.5px] text-muted-foreground pt-1">
+                  The document file is safely saved in local storage. You can retry indexing directly without re-uploading the file.
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    stopPolling();
+                    setUploadError(null);
+                    setIsUploading(false);
+                    setUploadDialogOpen(false);
+                  }}
+                  className="text-xs"
+                >
+                  Close Dialog
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    if (activeDocId) {
+                      setUploadError(null);
+                      setUploadProgress(15);
+                      setUploadStepText('Re-initiating indexing from disk...');
+                      try {
+                        const res = await knowledgeApi.retryIndexDocument(activeDocId);
+                        const jid = res?.data?.job_id;
+                        if (jid) {
+                          pollJobStatus(jid, uploadForm.title, activeDocId);
+                        }
+                      } catch (err) {
+                        setUploadError(err.message || 'Retry failed');
+                      }
+                    }
+                  }}
+                  className="text-xs bg-primary text-primary-foreground hover:bg-primary/90 gap-1.5"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Retry Indexing</span>
+                </Button>
+              </div>
+            </div>
+          ) : isUploading ? (
             <div className="py-8 space-y-4 text-center">
               <div className="p-4 rounded-full bg-primary/10 text-primary w-14 h-14 mx-auto flex items-center justify-center animate-pulse">
                 <Layers className="h-7 w-7" />
               </div>
               <div className="space-y-1">
-                <h4 className="font-bold text-sm text-foreground">Vector Ingestion In Progress</h4>
+                <div className="flex items-center justify-center gap-2 pb-1">
+                  <Badge variant="outline" className="text-[10px] font-mono uppercase bg-primary/10 text-primary border-primary/20">
+                    {uploadStage || 'INGESTION'}
+                  </Badge>
+                  <h4 className="font-bold text-sm text-foreground">Vector Ingestion In Progress</h4>
+                </div>
                 <p className="text-xs text-muted-foreground font-mono">{uploadStepText}</p>
               </div>
               <Progress value={uploadProgress} className="h-2 max-w-sm mx-auto" />
-              <span className="text-xs font-mono text-primary font-bold">{uploadProgress}% Complete</span>
+              <div className="flex items-center justify-center gap-2 text-xs font-mono">
+                <span className="text-primary font-bold">{uploadProgress}% Complete</span>
+                {uploadProgress < 100 && (
+                  <span className="text-muted-foreground text-[11px]">&bull; Live backend worker</span>
+                )}
+              </div>
             </div>
           ) : (
             <form
@@ -1031,32 +1212,43 @@ export function AdminKnowledgeBasePage() {
                 }
                 if (selectedFile) {
                   setIsUploading(true);
-                  setUploadProgress(20);
+                  setUploadStage('UPLOADING');
+                  setUploadProgress(10);
                   setUploadStepText('Uploading document binary to storage...');
+                  setUploadError(null);
                   try {
                     const formData = new FormData();
                     formData.append('file', selectedFile);
                     formData.append('title', uploadForm.title || selectedFile.name);
                     if (uploadForm.description) formData.append('description', uploadForm.description);
-                    formData.append('document_type', 'GUIDELINE');
-                    formData.append('source_authority', 'MOHFW');
+                    formData.append(
+                      'document_type',
+                      uploadForm.category === 'National Immunization Schedule (NIS)' ? 'SCHEDULE' : 'GUIDELINE'
+                    );
+                    formData.append(
+                      'source_authority',
+                      uploadForm.source && uploadForm.source.includes('WHO') ? 'WHO' : 'MOHFW'
+                    );
                     if (uploadForm.effectiveDate) formData.append('publication_date', uploadForm.effectiveDate);
 
-                    setUploadProgress(50);
-                    setUploadStepText('Generating Gemini Embedding 2 vectors...');
-
                     const resp = await knowledgeApi.uploadDocument(formData);
-                    setUploadProgress(95);
-                    setUploadStepText('Writing vector index into ChromaDB...');
+                    const jobId = resp?.data?.job_id;
+                    const docId = resp?.data?.id;
 
-                    await loadBackendDocuments();
-                    setIsUploading(false);
-                    setUploadDialogOpen(false);
-                    setSelectedFile(null);
-                    setToastNotice(`"${resp?.data?.title || uploadForm.title}" successfully uploaded and indexed!`);
+                    if (jobId) {
+                      pollJobStatus(jobId, resp?.data?.title || uploadForm.title, docId);
+                    } else {
+                      setUploadProgress(100);
+                      setUploadStepText('Uploaded successfully.');
+                      await loadBackendDocuments();
+                      setIsUploading(false);
+                      setUploadDialogOpen(false);
+                      setSelectedFile(null);
+                      setToastNotice(`"${resp?.data?.title || uploadForm.title}" successfully uploaded!`);
+                    }
                   } catch (err) {
                     setIsUploading(false);
-                    setToastNotice(`Upload failed: ${err.message || 'Error processing document'}`);
+                    setUploadError(err.message || 'Error uploading document');
                   }
                 } else {
                   setToastNotice('Please select a valid document file (.pdf, .docx, .txt, .md) to upload.');
@@ -1414,7 +1606,7 @@ export function AdminKnowledgeBasePage() {
                           <span className="text-xs font-semibold uppercase tracking-wider font-mono text-muted-foreground">
                             ChromaDB Semantic Vector Chunks ({selectedDoc.chunks?.length || 0})
                           </span>
-                          <span className="text-[11px] font-mono text-primary">Embedding: text-embedding-004</span>
+                          <span className="text-[11px] font-mono text-primary">Embedding: gemini-embedding-2 (3072 dim)</span>
                         </div>
 
                         {/* Chunk Search */}
@@ -1633,11 +1825,43 @@ function IndexingBadge({ status, failureReason }) {
       </Badge>
     );
   }
-  if (status === 'PENDING') {
+  if (status === 'PENDING' || status === 'UPLOADED') {
+    return (
+      <Badge variant="outline" className="text-[11px] bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/30 gap-1 font-mono">
+        <Clock className="h-3 w-3 text-sky-600 dark:text-sky-400" />
+        <span>Uploaded</span>
+      </Badge>
+    );
+  }
+  if (status === 'PARSING' || status === 'CHUNKING' || status === 'PROCESSING') {
+    return (
+      <Badge variant="outline" className="text-[11px] bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/30 gap-1 font-mono animate-pulse">
+        <Layers className="h-3 w-3 text-indigo-600 dark:text-indigo-400 animate-spin" />
+        <span>Parsing...</span>
+      </Badge>
+    );
+  }
+  if (status === 'EMBEDDING') {
+    return (
+      <Badge variant="outline" className="text-[11px] bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30 gap-1 font-mono animate-pulse">
+        <Sparkles className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+        <span>Embedding...</span>
+      </Badge>
+    );
+  }
+  if (status === 'INDEXING') {
+    return (
+      <Badge variant="outline" className="text-[11px] bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/30 gap-1 font-mono animate-pulse">
+        <Database className="h-3 w-3 text-violet-600 dark:text-violet-400" />
+        <span>Indexing...</span>
+      </Badge>
+    );
+  }
+  if (status === 'RETRY_PENDING') {
     return (
       <Badge variant="outline" className="text-[11px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 gap-1 font-mono animate-pulse">
-        <Clock className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-        <span>Queued</span>
+        <RotateCcw className="h-3 w-3 text-amber-600 dark:text-amber-400 animate-spin" />
+        <span>Retry Queued</span>
       </Badge>
     );
   }
@@ -1649,7 +1873,7 @@ function IndexingBadge({ status, failureReason }) {
         title={failureReason || 'Indexing failed'}
       >
         <XCircle className="h-3 w-3 text-rose-600 dark:text-rose-400" />
-        <span>Failed OCR</span>
+        <span>Indexing Failed</span>
       </Badge>
     );
   }

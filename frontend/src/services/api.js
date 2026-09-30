@@ -5,7 +5,8 @@ import {
   GLOBAL_STORAGE_KEYS,
 } from './offlineSync.js';
 
-const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8000/api/v1';
+const rawBaseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8000/api/v1';
+const API_BASE_URL = String(rawBaseUrl).trim().replace(/\/+$/, '');
 
 /**
  * Maps API routes to user-scoped local cache categories
@@ -551,6 +552,24 @@ export const knowledgeApi = {
     });
   },
 
+  getJobStatus: async (jobId) => {
+    return await request(`/knowledge/jobs/${jobId}`, {
+      method: 'GET',
+    });
+  },
+
+  retryIndexDocument: async (documentId) => {
+    return await request(`/knowledge/documents/${documentId}/retry`, {
+      method: 'POST',
+    });
+  },
+
+  reindexCollection: async () => {
+    return await request('/knowledge/reindex-collection', {
+      method: 'POST',
+    });
+  },
+
   queryKnowledgeBase: async (payload) => {
     return await request('/knowledge/query', {
       method: 'POST',
@@ -693,14 +712,24 @@ export const agentApi = {
   },
 
   generateReport: async (payload) => {
+    const cleanPayload = {
+      ...payload,
+      output_format: payload?.output_format || 'json',
+      family_member_id: (payload?.family_member_id === 'ALL' || !payload?.family_member_id) ? undefined : payload.family_member_id,
+    };
     return await request('/agents/reports/generate', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(cleanPayload),
     });
   },
 
   downloadReportPdf: async (payload, defaultFilename = 'vaxassist_passport.pdf') => {
-    return await downloadFile('/agents/reports/download', payload, defaultFilename);
+    const cleanPayload = {
+      ...payload,
+      output_format: 'pdf',
+      family_member_id: (payload?.family_member_id === 'ALL' || !payload?.family_member_id) ? undefined : payload.family_member_id,
+    };
+    return await downloadFile('/agents/reports/download', cleanPayload, defaultFilename);
   },
 };
 

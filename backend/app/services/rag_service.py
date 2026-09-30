@@ -96,9 +96,36 @@ class RAGService:
             where_filter=where_filter,
         )
 
-        # 4. Relevance filtering
+        # 4. Relevance & Document Status filtering (Only verified INDEXED documents, score >= threshold)
+        indexed_doc_ids: Optional[set] = None
+        try:
+            from app.database import get_database
+            db = get_database()
+            if db is not None:
+                cursor = db["knowledge_documents"].find(
+                    {"status": "INDEXED"},
+                    {"_id": 1}
+                )
+                indexed_doc_ids = set()
+                async for d in cursor:
+                    indexed_doc_ids.add(str(d["_id"]))
+        except Exception as db_err:
+            logger.debug(f"Could not check MongoDB indexed documents: {db_err}")
+
         relevant_chunks: List[Dict[str, Any]] = []
         for rc in raw_chunks:
+            meta = rc.get("metadata", {})
+            doc_id = meta.get("knowledge_document_id", "")
+
+            # If MongoDB is connected, strictly require doc_id to be in active indexed_doc_ids
+            if indexed_doc_ids is not None:
+                if doc_id not in indexed_doc_ids:
+                    continue
+            else:
+                # Fallback: strictly check metadata document_status
+                if meta.get("document_status") != "INDEXED":
+                    continue
+
             if rc["similarity_score"] >= self.relevance_threshold:
                 relevant_chunks.append(rc)
 
@@ -182,21 +209,30 @@ class RAGService:
         try:
             answer = await self._generate_gemini_answer(user_prompt)
         except Exception as gen_err:
-            logger.warning(f"Gemini generation service error: {gen_err}")
+            clean_err = str(type(gen_err).__name__)
+            logger.warning(f"Gemini generation service error: {clean_err}")
             doc_title = unique_sources[0].document_title if unique_sources else "Verified Clinical Guidelines"
             snippet = relevant_chunks[0]["content"][:320].strip() if relevant_chunks else ""
             answer = (
                 f"Official Immunization Guidance (Retrieved from {doc_title}):\n\n"
                 f"{snippet}...\n\n"
-                f"[Service Notice: AI synthesis is temporarily throttled or unavailable ({str(gen_err)}). "
+                f"[Service Notice: AI synthesis is temporarily throttled or unavailable ({clean_err}). "
                 f"The verified guideline excerpt above was retrieved directly from official documentation. Please consult your pediatrician.]"
             )
 
+        ans_lower = answer.lower()
         is_unsupported = (
-            "does not contain sufficient verified documentation" in answer.lower()
-            or "does not currently contain verified documentation" in answer.lower()
-            or "knowledge base does not contain" in answer.lower()
-            or "insufficient verified documentation" in answer.lower()
+            "does not contain sufficient verified documentation" in ans_lower
+            or "does not currently contain verified documentation" in ans_lower
+            or "knowledge base does not contain" in ans_lower
+            or "insufficient verified documentation" in ans_lower
+            or "not contain clear, explicit information" in ans_lower
+            or "not contain sufficient information" in ans_lower
+            or "provided context does not contain" in ans_lower
+            or "provided documents do not contain" in ans_lower
+            or "provided official context does not" in ans_lower
+            or "no information is provided" in ans_lower
+            or "not mentioned in the provided" in ans_lower
         )
         if is_unsupported:
             unique_sources = []
@@ -216,7 +252,25 @@ class RAGService:
             },
         )
 
-    async def _generate_gemini_answer(self, user_prompt: str) -> str:
+    async def generate_text(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+    ) -> str:
+        """Generates clinical text using Google Gemini with clinical guardrails."""
+        return await self._generate_gemini_answer(
+            user_prompt=prompt,
+            system_prompt=system_prompt,
+            max_tokens=max_tokens,
+        )
+
+    async def _generate_gemini_answer(
+        self,
+        user_prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: int = 1024,
+    ) -> str:
         """Calls Gemini API with the assembled prompt and clinical system instructions."""
         api_key = settings.GEMINI_API_KEY
         if not api_key or not api_key.strip():
@@ -225,9 +279,10 @@ class RAGService:
         endpoint = f"{GOOGLE_API_BASE}/{self.generation_model}:generateContent"
         params = {"key": api_key.strip()}
 
+        effective_system = system_prompt or RAG_SYSTEM_PROMPT
         payload = {
             "system_instruction": {
-                "parts": [{"text": RAG_SYSTEM_PROMPT}]
+                "parts": [{"text": effective_system}]
             },
             "contents": [
                 {
@@ -238,7 +293,7 @@ class RAGService:
             "generationConfig": {
                 "temperature": 0.2,  # Low temperature for clinical fidelity
                 "topP": 0.8,
-                "maxOutputTokens": 1024,
+                "maxOutputTokens": max_tokens,
             }
         }
 

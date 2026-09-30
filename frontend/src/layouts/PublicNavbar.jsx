@@ -4,6 +4,7 @@ import { Menu, ArrowRight, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import ThemeToggle from '@/components/common/ThemeToggle';
+import ModeToggle from '@/components/common/ModeToggle';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { useAuth } from '@/context/AuthContext';
 import { cn } from '@/lib/utils';
@@ -51,6 +52,7 @@ export function PublicNavbar() {
 
         {/* Desktop Right CTAs & Theme Toggle */}
         <div className="hidden md:flex items-center gap-3">
+          <ModeToggle />
           <ThemeToggle />
 
           {isAuthenticated ? (

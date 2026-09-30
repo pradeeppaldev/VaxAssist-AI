@@ -364,7 +364,12 @@ class ReportAgent(BaseAgent):
         rec_items: List[RecommendationReportItem] = []
         if (
             input_data.include_recommendations
-            and input_data.report_type in (ReportType.COMPREHENSIVE_RECORD, ReportType.VACCINATION_STATUS)
+            and input_data.report_type in (
+                ReportType.COMPREHENSIVE_RECORD,
+                ReportType.VACCINATION_STATUS,
+                ReportType.CLINICIAN_BRIEF,
+                ReportType.CLINICAL_AUDIT,
+            )
         ):
             try:
                 fixture_recommendation = kwargs.get("recommendation_result_fixture")

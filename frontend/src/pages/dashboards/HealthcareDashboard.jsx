@@ -80,10 +80,12 @@ import {
   MOCK_TODAY_SCHEDULE,
   MOCK_PATIENTS_REGISTRY,
 } from '@/data/mockHealthcareData';
+import { useDemoMode } from '@/context/DemoModeContext';
 
 export default function HealthcareDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isDemoMode } = useDemoMode();
 
   const activeDoctorName = user?.name || MOCK_HEALTHCARE_WORKER.name;
   const activeHospital = user?.clinic_or_hospital || MOCK_HEALTHCARE_WORKER.clinicOrHospital;
@@ -139,6 +141,15 @@ export default function HealthcareDashboard() {
     e.preventDefault();
     setIsSubmittingRecord(true);
     setRecordError(null);
+
+    if (isDemoMode) {
+      setTimeout(() => {
+        setIsSubmittingRecord(false);
+        setRecordSubmitSuccess(true);
+      }, 500);
+      return;
+    }
+
     try {
       const doseMatch = recordForm.doseNumber.match(/\d+/);
       const doseNum = doseMatch ? parseInt(doseMatch[0], 10) : 1;
@@ -257,6 +268,17 @@ export default function HealthcareDashboard() {
               >
                 <Stethoscope className="h-3.5 w-3.5" />
                 <span>{MOCK_HEALTHCARE_WORKER.roleBadge}</span>
+              </Badge>
+              <Badge
+                variant="outline"
+                className={`gap-1.5 text-xs py-0.5 px-2.5 font-medium ${
+                  isDemoMode
+                    ? 'border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10'
+                    : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+                }`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${isDemoMode ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+                <span>{isDemoMode ? 'Demo Simulation Mode' : 'Live Clinical Network'}</span>
               </Badge>
             </div>
             <p className="text-sm font-semibold text-primary">

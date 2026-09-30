@@ -73,6 +73,8 @@ import {
 } from '@/components/ui/dialog';
 
 import { familyApi, notificationApi, agentApi } from '@/services/api';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { INITIAL_FAMILY_MEMBERS, INITIAL_REMINDERS_DATA } from '@/data/mockFamilyData';
 
 const DEFAULT_REMINDER_PREFERENCES = {
   emailNotifications: true,
@@ -123,12 +125,13 @@ function mapNotificationToReminder(n, members = []) {
 
 export default function RemindersPage() {
   const navigate = useNavigate();
+  const { isDemoMode, demoStore } = useDemoMode();
 
   // State Management
-  const [reminders, setReminders] = useState([]);
+  const [reminders, setReminders] = useState(() => isDemoMode ? INITIAL_REMINDERS_DATA : []);
   const [preferences, setPreferences] = useState(DEFAULT_REMINDER_PREFERENCES);
-  const [familyMembers, setFamilyMembers] = useState([]);
-  const [viewState, setViewState] = useState('loading'); // 'normal' | 'loading' | 'empty' | 'error'
+  const [familyMembers, setFamilyMembers] = useState(() => isDemoMode ? (demoStore?.familyMembers || INITIAL_FAMILY_MEMBERS) : []);
+  const [viewState, setViewState] = useState(() => isDemoMode ? 'normal' : 'loading'); // 'normal' | 'loading' | 'empty' | 'error'
   const [loadError, setLoadError] = useState(null);
   const [activeTab, setActiveTab] = useState('upcoming'); // 'upcoming' | 'history' | 'preferences'
 
@@ -149,9 +152,16 @@ export default function RemindersPage() {
 
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Load real backend data
+  // Load real backend data or demo store
   const loadBackendData = React.useCallback(async () => {
     setLoadError(null);
+    if (isDemoMode) {
+      setFamilyMembers(demoStore?.familyMembers || INITIAL_FAMILY_MEMBERS);
+      setReminders(INITIAL_REMINDERS_DATA);
+      setViewState('normal');
+      return;
+    }
+
     try {
       const [membersRes, notifsRes, prefsRes] = await Promise.allSettled([
         familyApi.getMembers(),

@@ -7,6 +7,7 @@ from app.models.base import MongoBaseModel
 
 class DocumentType(str, Enum):
     GUIDELINE = "GUIDELINE"
+    SCHEDULE = "SCHEDULE"
     POLICY = "POLICY"
     VACCINE_INFO = "VACCINE_INFO"
     CIRCULAR = "CIRCULAR"
@@ -23,9 +24,35 @@ class SourceAuthority(str, Enum):
 
 
 class DocumentStatus(str, Enum):
+    UPLOADED = "UPLOADED"
+    PARSING = "PARSING"
+    EMBEDDING = "EMBEDDING"
+    INDEXING = "INDEXING"
+    INDEXED = "INDEXED"
+    FAILED = "FAILED"
+    RETRY_PENDING = "RETRY_PENDING"
+    # Legacy compatibility aliases
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
-    INDEXED = "INDEXED"
+
+
+class IngestionStage(str, Enum):
+    UPLOADING = "UPLOADING"
+    PARSING = "PARSING"
+    CHUNKING = "CHUNKING"
+    EMBEDDING = "EMBEDDING"
+    INDEXING = "INDEXING"
+    VERIFYING = "VERIFYING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class IngestionJobStatus(str, Enum):
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    RUNNING = "PROCESSING"
+    PENDING = "QUEUED"
+    COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
 
@@ -43,10 +70,14 @@ class KnowledgeDocument(MongoBaseModel):
     source_url: Optional[str] = Field(default=None, description="Public URL of the source document")
     publication_date: Optional[date] = Field(default=None, description="Official publication date")
     uploaded_by: str = Field(..., description="User ID of the administrator who uploaded the document")
-    status: DocumentStatus = Field(default=DocumentStatus.PENDING, description="Current ingestion & indexing state")
+    status: DocumentStatus = Field(default=DocumentStatus.UPLOADED, description="Current ingestion & indexing state")
     error_message: Optional[str] = Field(default=None, description="Error details if processing or indexing failed")
+    last_indexing_error: Optional[str] = Field(default=None, description="Detailed message of last failure")
     chunk_count: int = Field(default=0, description="Number of text chunks indexed into ChromaDB")
     index_version: int = Field(default=1, description="Version of the chunk index, incremented on re-indexing")
     chroma_collection_name: str = Field(default="vaxassist_knowledge", description="ChromaDB collection storing vectors")
+    embedding_model: str = Field(default="models/gemini-embedding-2", description="Model used for vector embeddings")
+    embedding_dimensions: int = Field(default=3072, description="Vector dimension size")
+    tags: List[str] = Field(default_factory=list, description="Categorization tags")
     indexed_at: Optional[datetime] = Field(default=None, description="Timestamp when indexing successfully completed")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional custom metadata")

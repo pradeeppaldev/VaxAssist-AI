@@ -36,15 +36,18 @@ export function AppShell() {
           </SheetContent>
         </Sheet>
 
-        {/* Main Content Area with Framer Motion Page Transition */}
+        {/* Main Content Area with Page Transition */}
         <main className="flex-1 min-w-0 px-4 py-6 sm:px-6 lg:px-8 pb-20 md:pb-8">
           <div className="mx-auto max-w-5xl space-y-6">
-            <ErrorBoundary>
+            <ErrorBoundary
+              key={location.pathname}
+              resetKey={location.pathname}
+            >
               <motion.div
                 key={location.pathname}
                 initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
               >
                 <Outlet />
               </motion.div>

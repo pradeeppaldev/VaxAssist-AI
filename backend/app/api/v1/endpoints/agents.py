@@ -7,7 +7,7 @@ import logging
 from typing import Optional, Dict, Any, List
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 logger = logging.getLogger("vaxassist.api.agents")
 
@@ -574,12 +574,59 @@ class ReportGenerateRequest(BaseModel):
     family_member_id: Optional[str] = Field(default=None, description="Target family member ID (optional, defaults to primary member)")
     report_type: ReportType = Field(default=ReportType.COMPREHENSIVE_RECORD, description="Type of report: comprehensive_record, vaccination_history, vaccination_status, progress_summary")
     output_format: ReportOutputFormat = Field(default=ReportOutputFormat.JSON, description="Output format: json or pdf")
+    format: Optional[str] = Field(default=None, description="Legacy alias for output_format")
     reference_date: Optional[date] = Field(default=None, description="Evaluation reference date (defaults to today)")
     include_recommendations: bool = Field(default=True, description="Include clinical recommendations in comprehensive report")
     include_data_quality: bool = Field(default=True, description="Include data quality checks and auditing discrepancies")
     include_private_optional: bool = Field(default=False, description="Evaluate private sector optional vaccines")
     eligible_for_je: bool = Field(default=False, description="Japanese Encephalitis endemic status")
     correlation_id: Optional[str] = Field(default=None, description="Cross-agent correlation ID")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # 1. Alias format -> output_format
+            if "format" in data and ("output_format" not in data or not data["output_format"]):
+                data["output_format"] = data["format"]
+            if "output_format" in data and isinstance(data["output_format"], str):
+                fmt = data["output_format"].lower().strip()
+                data["output_format"] = ReportOutputFormat.PDF if fmt == "pdf" else ReportOutputFormat.JSON
+
+            # 2. Normalize family_member_id
+            if "family_member_id" in data:
+                fmid = data["family_member_id"]
+                if fmid in ("ALL", "all", "", "null", "undefined", None):
+                    data["family_member_id"] = None
+
+            # 3. Normalize report_type
+            if "report_type" in data and isinstance(data["report_type"], str):
+                rt = data["report_type"].lower().strip()
+                type_map = {
+                    "clinician_brief": ReportType.CLINICIAN_BRIEF,
+                    "clinical_audit": ReportType.CLINICAL_AUDIT,
+                    "clinical_record": ReportType.COMPREHENSIVE_RECORD,
+                    "vaccination_certificate": ReportType.VACCINATION_CERTIFICATE,
+                    "certificate": ReportType.VACCINATION_CERTIFICATE,
+                    "immunization_passport": ReportType.VACCINATION_CERTIFICATE,
+                    "passport": ReportType.VACCINATION_CERTIFICATE,
+                    "comprehensive": ReportType.COMPREHENSIVE_RECORD,
+                    "comprehensive_record": ReportType.COMPREHENSIVE_RECORD,
+                    "history": ReportType.VACCINATION_HISTORY,
+                    "vaccination_history": ReportType.VACCINATION_HISTORY,
+                    "status": ReportType.VACCINATION_STATUS,
+                    "vaccination_status": ReportType.VACCINATION_STATUS,
+                    "progress": ReportType.PROGRESS_SUMMARY,
+                    "progress_summary": ReportType.PROGRESS_SUMMARY,
+                }
+                if rt in type_map:
+                    data["report_type"] = type_map[rt]
+                else:
+                    try:
+                        data["report_type"] = ReportType(rt)
+                    except ValueError:
+                        data["report_type"] = ReportType.COMPREHENSIVE_RECORD
+        return data
 
 
 @router.post(
@@ -962,6 +1009,10 @@ async def route_orchestrator_task(
         inc_rem = True
         inc_rec = True
         inc_rep = False
+
+    # Suppress reminder dispatch for read-only conversational inquiries or dry-runs
+    if (req.query or req.dry_run) and workflow != OrchestrationWorkflowType.REMINDER_PIPELINE:
+        inc_rem = False
 
     agent_input = OrchestratorInput(
         workflow=workflow,

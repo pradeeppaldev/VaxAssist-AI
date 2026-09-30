@@ -55,6 +55,7 @@ from app.agents.report import (
     ReportType,
     ReportOutputFormat,
 )
+from app.services.rag_service import rag_service
 
 logger = logging.getLogger("vaxassist.agents.orchestrator")
 
@@ -256,7 +257,7 @@ class MultiAgentOrchestrator(BaseAgent):
         else:
             result.workflow_status = AgentStatus.FAILED
 
-        # Build human-readable executive summary
+        # Build human-readable executive summary & technical telemetry
         summary_parts = [
             f"Workflow '{input_data.workflow.value}' completed with status {result.workflow_status.value} in {result.total_duration_ms}ms.",
             f"Steps executed ({len(result.steps_executed)}): {', '.join(result.steps_executed) if result.steps_executed else 'None'}.",
@@ -283,7 +284,20 @@ class MultiAgentOrchestrator(BaseAgent):
             chk = result.report_checksum[:8] if result.report_checksum else "N/A"
             summary_parts.append(f"Report: Compiled ({rep_type_val}) with checksum {chk}...")
 
-        result.summary = " ".join(summary_parts)
+        telemetry_str = " ".join(summary_parts)
+        result.execution_telemetry_summary = telemetry_str
+
+        # Generate grounded natural clinical answer for user
+        try:
+            natural_ans = await self._synthesize_natural_answer(result, input_data)
+            result.natural_answer = natural_ans
+            result.summary = natural_ans
+        except Exception as syn_err:
+            logger.warning(f"Natural answer synthesis encountered error: {syn_err}")
+            fallback_ans = self._build_deterministic_summary(result, input_data)
+            result.natural_answer = fallback_ans
+            result.summary = fallback_ans or telemetry_str
+
         return result
 
     # =========================================================================
@@ -414,6 +428,22 @@ class MultiAgentOrchestrator(BaseAgent):
             self._record_step(result, "report", "agent_report_generation_v1", rp_status, rp_dur, rp_data, rp_err)
             if rp_status == StepExecutionStatus.SUCCESS:
                 result.report = rp_data
+
+        # Step 5: Knowledge / RAG Agent (Optional if query supplied)
+        if input_data.query:
+            k_input = KnowledgeAgentInput(
+                question=input_data.query,
+                correlation_id=cid,
+            )
+            k_status, k_data, k_dur, k_err = await self._execute_step(
+                step_name="knowledge",
+                agent_id="agent_knowledge_rag_v1",
+                coroutine=knowledge_agent.execute(input_data=k_input),
+                timeout_seconds=input_data.step_timeout_seconds,
+            )
+            self._record_step(result, "knowledge", "agent_knowledge_rag_v1", k_status, k_dur, k_data, k_err)
+            if k_status == StepExecutionStatus.SUCCESS:
+                result.knowledge = k_data
 
     async def _run_clinical_advisory(
         self,
@@ -739,6 +769,198 @@ class MultiAgentOrchestrator(BaseAgent):
             timestamp=datetime.utcnow(),
         )
         logger.info(f"[Orchestrator] Step '{step_name}' skipped: {reason}")
+
+    # =========================================================================
+    # Clinical Answer Synthesis
+    # =========================================================================
+
+    def _build_deterministic_summary(
+        self,
+        result: OrchestratorResult,
+        input_data: OrchestratorInput,
+    ) -> str:
+        """
+        Builds a structured, human-readable clinical summary directly from
+        authoritative deterministic monitoring and recommendation data with zero date fabrication.
+        Strictly enforces that past dates appear under Overdue, and only future dates appear under Upcoming.
+        """
+        if result.knowledge and result.knowledge.answer and not (result.monitoring and result.monitoring.member_assessments):
+            return result.knowledge.answer
+
+        if not result.monitoring or not result.monitoring.member_assessments:
+            if result.report:
+                rep_type = getattr(result.report.report_type, "value", str(result.report.report_type))
+                return f"Official immunization record ({rep_type}) successfully compiled and cryptographically verified. Ready for download."
+            return "Immunization records evaluated successfully. All family records are up to date."
+
+        ref_date = getattr(result.monitoring, "evaluation_date", None)
+        if not ref_date:
+            ref_date = date.today()
+        elif hasattr(ref_date, "date"):
+            ref_date = ref_date.date()
+
+        lines = ["Based on verified records under the Universal Immunization Programme (UIP):\n"]
+
+        for member in result.monitoring.member_assessments:
+            age_info = f" ({member.age_display})" if member.age_display else ""
+            lines.append(f"### {member.full_name}{age_info}")
+
+            # Collect all pending doses across categories
+            all_pending = []
+            if member.categorized_doses:
+                for cat, doses in member.categorized_doses.items():
+                    if cat != "COMPLETED":
+                        all_pending.extend(doses)
+
+            # Strict temporal partitioning
+            seen_rules = set()
+            unique_overdue = []
+            unique_due_today = []
+            unique_upcoming = []
+
+            for d in all_pending:
+                if d.rule_code in seen_rules:
+                    continue
+                seen_rules.add(d.rule_code)
+
+                calc_date = getattr(d, "calculated_due_date", None)
+                if hasattr(calc_date, "date"):
+                    calc_date = calc_date.date()
+
+                status_val = d.status.value if hasattr(d.status, "value") else str(d.status)
+
+                # Strict classification: past-due is ALWAYS overdue, never upcoming
+                if status_val in ("OVERDUE", "MISSED", "CATCH_UP_REQUIRED") or (calc_date and calc_date < ref_date):
+                    unique_overdue.append(d)
+                elif calc_date and calc_date == ref_date:
+                    unique_due_today.append(d)
+                else:
+                    unique_upcoming.append(d)
+
+            # Sort chronologically
+            unique_overdue.sort(key=lambda x: getattr(x, "calculated_due_date", date.max))
+            unique_due_today.sort(key=lambda x: getattr(x, "calculated_due_date", date.max))
+            unique_upcoming.sort(key=lambda x: getattr(x, "calculated_due_date", date.max))
+
+            if unique_overdue:
+                lines.append("* **Overdue / Catch-Up Vaccinations:**")
+                for d in unique_overdue:
+                    due_str = d.calculated_due_date.strftime("%d %b %Y") if getattr(d, "calculated_due_date", None) else "Pending"
+                    lines.append(f"  - {d.vaccine_name} ({d.dose_name}) - Due: {due_str} (Status: Overdue)")
+            else:
+                lines.append("* **Overdue Vaccinations:**")
+                lines.append(f"  - None. {member.full_name} is currently up to date with all age-appropriate vaccinations.")
+
+            if unique_due_today:
+                lines.append("* **Due Today:**")
+                for d in unique_due_today:
+                    due_str = d.calculated_due_date.strftime("%d %b %Y") if getattr(d, "calculated_due_date", None) else "Today"
+                    lines.append(f"  - {d.vaccine_name} ({d.dose_name}) - Due: {due_str} (Status: Due Today)")
+
+            if unique_upcoming:
+                lines.append("* **Upcoming Vaccinations:**")
+                for d in unique_upcoming[:5]:
+                    due_str = d.calculated_due_date.strftime("%d %b %Y") if getattr(d, "calculated_due_date", None) else "Scheduled"
+                    lines.append(f"  - {d.vaccine_name} ({d.dose_name}) - Due: {due_str}")
+            else:
+                lines.append("* **Upcoming Vaccinations:**")
+                lines.append("  - No immediate doses scheduled in the next 30 days.")
+
+            # Catch-up pathway guidance if available from recommendations
+            if result.recommendation and result.recommendation.member_recommendations:
+                mem_recs = [
+                    r for r in result.recommendation.member_recommendations
+                    if getattr(r, "member_id", None) == member.member_id
+                ]
+                for mr in mem_recs:
+                    for cu in getattr(mr, "catch_up_pathways", []):
+                        lines.append(f"* **Catch-Up Guidance:** {cu.vaccine_name}: {cu.catch_up_guidance}")
+
+            lines.append("")
+
+        lines.append("*Safe Clinical Advisory:* Please consult your pediatrician or local primary health center to confirm eligibility and administer pending vaccines safely.")
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _clean_markdown_text(text: str) -> str:
+        """
+        Cleans up raw markdown artifacts and escape sequences while preserving
+        hyphens in vaccine compound names (e.g., Measles-Rubella, DPT-HepB-Hib) and dates.
+        """
+        if not text:
+            return ""
+        import re
+        # 1. Unescape escaped asterisks, underscores, and hyphens from LLM
+        cleaned = text.replace(r"\*", "*").replace(r"\_", "_")
+        cleaned = re.sub(r'(^|\n)\s*\\-\s+', r'\1- ', cleaned)
+        cleaned = cleaned.replace(r"\-", "-")
+
+        # 2. Fix nested heading + bold markers: e.g. **### Heading** or ### **Heading**
+        cleaned = re.sub(r'\*\*\s*(#{1,6}\s+[^*]+?)\s*\*\*', r'\1', cleaned)
+        cleaned = re.sub(r'(#{1,6})\s*\*\*(.+?)\*\*', r'\1 \2', cleaned)
+
+        # 3. Fix malformed advisory markers: e.g. ***Safe Clinical Advisory:*** or **\*Safe Clinical Advisory:\**
+        cleaned = re.sub(r'[*_\\]+\s*(Safe Clinical Advisory:?)\s*[*_\\]+', r'*\1*', cleaned, flags=re.IGNORECASE)
+
+        # 4. Fix quadruple bold markers
+        cleaned = re.sub(r'\*{4,}', r'**', cleaned)
+
+        # 5. Clean up any trailing backslashes at end of lines
+        cleaned = re.sub(r'\\+\s*$', '', cleaned, flags=re.MULTILINE)
+
+        return cleaned.strip()
+
+    async def _synthesize_natural_answer(
+        self,
+        result: OrchestratorResult,
+        input_data: OrchestratorInput,
+    ) -> str:
+        """
+        Synthesizes a natural, compassionate English response using Google Gemini Flash,
+        grounded strictly in the deterministic clinical findings with fallback to deterministic text.
+        """
+        deterministic_summary = self._build_deterministic_summary(result, input_data)
+
+        # Pure knowledge answer with no monitoring records
+        if result.knowledge and result.knowledge.answer and not (result.monitoring and result.monitoring.member_assessments):
+            return self._clean_markdown_text(result.knowledge.answer)
+
+        prompt_query = input_data.query or "What are the upcoming and overdue vaccinations for my family?"
+
+        system_instruction = (
+            "You are VaxAssist AI, an authoritative pediatric clinical immunization assistant. "
+            "Your task is to provide a clear, warm, organized, and patient-friendly answer to the parent based STRICTLY on the provided verified immunization records and official Universal Immunization Programme (UIP) guidelines.\n\n"
+            "Mandatory Clinical Rules:\n"
+            "1. Group findings clearly by family member using standard markdown headers (e.g. '### Child Name').\n"
+            "2. Under each member, strictly separate 'Overdue / Catch-Up Vaccinations' and 'Upcoming Vaccinations':\n"
+            "   - Overdue Vaccinations: Any dose with a past due date. Never omit or move these.\n"
+            "   - Upcoming Vaccinations: ONLY doses with future scheduled dates. NEVER place any past-due vaccine under Upcoming.\n"
+            "3. If catch-up recommendations or warnings are present, explain them in clear, reassuring language (e.g. vaccination series can resume without restarting from dose 1).\n"
+            "4. If all vaccinations are completed and up to date for a child, give encouraging confirmation.\n"
+            "5. Conclude with: '*Safe Clinical Advisory:* Please consult your pediatrician or local primary health center to confirm eligibility and administer pending vaccines safely.'\n"
+            "6. Do NOT invent, assume, or alter any dates or vaccine names. Keep responses strictly faithful to the verified clinical data.\n"
+            "7. Output clean standard markdown without escaping asterisks or hyphens (do NOT write '\\*' or '\\-'). Use standard bold '**' and bullet '- '."
+        )
+
+        user_prompt = (
+            f"VERIFIED CLINICAL IMMUNIZATION DATA:\n"
+            f"{deterministic_summary}\n\n"
+            f"USER INQUIRY:\n"
+            f"{prompt_query}\n\n"
+            f"Please formulate a clear, compassionate, and organized response answering the user's inquiry based strictly on the verified data above."
+        )
+
+        try:
+            gemini_ans = await asyncio.wait_for(
+                rag_service.generate_text(prompt=user_prompt, system_prompt=system_instruction, max_tokens=1024),
+                timeout=6.0,
+            )
+            if gemini_ans and len(gemini_ans.strip()) > 20 and "does not contain sufficient" not in gemini_ans.lower():
+                return self._clean_markdown_text(gemini_ans)
+        except Exception as e:
+            logger.info(f"Gemini natural synthesis skipped or timed out ({e}). Using deterministic summary.")
+
+        return self._clean_markdown_text(deterministic_summary)
 
 
 # Global singleton instance

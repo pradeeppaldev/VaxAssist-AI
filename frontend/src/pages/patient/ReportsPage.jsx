@@ -69,6 +69,8 @@ import {
 
 // Real API Services
 import { familyApi, agentApi, downloadJsonFile } from '@/services/api';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { Link } from 'react-router-dom';
 
 // Baseline Mock Data (Dev / Offline fallback)
 import { INITIAL_FAMILY_MEMBERS } from '@/data/mockFamilyData';
@@ -79,6 +81,8 @@ import {
 } from '@/data/mockReportsData';
 
 export default function ReportsPage() {
+  const { isDemoMode, setDemoMode, demoStore, downloadDemoPdf } = useDemoMode();
+
   // View State for Testing: 'normal' | 'loading' | 'empty' | 'error'
   const [viewState, setViewState] = useState('normal');
 
@@ -122,7 +126,7 @@ export default function ReportsPage() {
     let mounted = true;
     familyApi.getMembers()
       .then((res) => {
-        if (mounted && res?.data && res.data.length > 0) {
+        if (mounted && res?.data) {
           const mapped = res.data.map((m) => ({
             id: m.id,
             name: m.full_name,
@@ -145,8 +149,17 @@ export default function ReportsPage() {
   }, []);
 
   const displayMembers = useMemo(() => {
-    return familyMembers.length > 0 ? familyMembers : INITIAL_FAMILY_MEMBERS;
-  }, [familyMembers]);
+    if (isDemoMode) {
+      return (demoStore.familyMembers || []).map((m) => ({
+        id: m.id,
+        name: m.name,
+        relationship: m.relationship,
+        age: m.age || '',
+        raw: m,
+      }));
+    }
+    return familyMembers;
+  }, [isDemoMode, demoStore.familyMembers, familyMembers]);
 
   // Active member details for contextual headers
   const activeMember = useMemo(() => {
@@ -158,7 +171,12 @@ export default function ReportsPage() {
         age: `${displayMembers.length} Members`,
       };
     }
-    return displayMembers.find((m) => m.id === selectedMemberId) || displayMembers[0];
+    return displayMembers.find((m) => m.id === selectedMemberId) || displayMembers[0] || {
+      id: 'NONE',
+      name: 'No Member',
+      relationship: 'N/A',
+      age: '',
+    };
   }, [selectedMemberId, displayMembers]);
 
   // Real PDF Download Action
@@ -169,7 +187,15 @@ export default function ReportsPage() {
     const cleanName = memberName.toLowerCase().replace(/[^a-z0-9]/g, '_');
     const filename = `vaxassist_${typeKey}_${cleanName}.pdf`;
 
-    setDownloadToast(`Generating official ${reportTypeObj?.title || 'Report'} PDF from backend...`);
+    setDownloadToast(`Generating official ${reportTypeObj?.title || 'Report'} PDF...`);
+
+    if (isDemoMode) {
+      downloadDemoPdf(filename, `${reportTypeObj?.title || 'Immunization Record'} - ${memberName}`);
+      setDownloadToast(`Downloaded "${filename}" (Verified Simulation).`);
+      setTimeout(() => setDownloadToast(null), 3500);
+      return;
+    }
+
     try {
       await agentApi.downloadReportPdf({
         report_type: typeKey,
@@ -194,6 +220,21 @@ export default function ReportsPage() {
     const filename = `vaxassist_${typeKey}_${cleanName}.json`;
 
     setDownloadToast(`Compiling verified JSON record...`);
+
+    if (isDemoMode) {
+      const demoPayload = {
+        report_id: `DEMO-REP-${Date.now()}`,
+        patient_name: memberName,
+        status: 'VERIFIED_DEMO',
+        verification_hash: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        records: demoStore.familyMembers,
+      };
+      downloadJsonFile(demoPayload, filename);
+      setDownloadToast(`Downloaded "${filename}" (SHA-256 Verified).`);
+      setTimeout(() => setDownloadToast(null), 3500);
+      return;
+    }
+
     try {
       const resp = await agentApi.generateReport({
         report_type: typeKey,
@@ -567,6 +608,36 @@ export default function ReportsPage() {
       ========================================== */}
       {viewState === 'normal' && (
         <>
+          {/* Live Mode: Zero Members Empty State Banner */}
+          {!isDemoMode && !loadingMembers && familyMembers.length === 0 && (
+            <Card className="p-8 text-center border-dashed border-2 border-primary/30 bg-primary/5 mb-6">
+              <div className="h-12 w-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-3">
+                <Users className="h-6 w-6" />
+              </div>
+              <h3 className="font-bold text-base text-foreground font-sora">No Family Members Enrolled in Live Database</h3>
+              <p className="text-xs text-muted-foreground mt-1.5 max-w-md mx-auto leading-relaxed">
+                You are currently operating in Live Mode connected directly to MongoDB. To generate certified immunization passports and clinical summaries, enroll your first family member.
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <Button asChild size="sm" className="text-xs gap-1.5 shadow-xs">
+                  <Link to="/family">
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Enroll Family Member</span>
+                  </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs gap-1.5 border-amber-500/30 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                  onClick={() => setDemoMode(true)}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Switch to Demo Mode</span>
+                </Button>
+              </div>
+            </Card>
+          )}
+
           {/* 3. REPORT TYPES SECTION */}
           <section className="space-y-3.5">
             <div className="flex items-center justify-between">

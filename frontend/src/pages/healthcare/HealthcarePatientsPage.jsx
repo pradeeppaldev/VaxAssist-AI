@@ -59,9 +59,11 @@ import {
 
 // Mock Data
 import { MOCK_PATIENTS_REGISTRY, MOCK_HEALTHCARE_WORKER } from '@/data/mockHealthcareData';
+import { useDemoMode } from '@/context/DemoModeContext';
 
 export default function HealthcarePatientsPage() {
   const navigate = useNavigate();
+  const { isDemoMode } = useDemoMode();
 
   // Testing View Modes: 'normal' | 'loading' | 'empty' | 'error'
   const [viewState, setViewState] = useState('normal');
@@ -197,6 +199,17 @@ export default function HealthcarePatientsPage() {
         />
 
         <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+          <Badge
+            variant="outline"
+            className={`gap-1.5 text-xs py-1 px-2.5 font-medium ${
+              isDemoMode
+                ? 'border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10'
+                : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10'
+            }`}
+          >
+            <span className={`h-1.5 w-1.5 rounded-full ${isDemoMode ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+            <span>{isDemoMode ? 'Demo Mode Registry' : 'Live Clinical Registry'}</span>
+          </Badge>
           <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs flex items-center gap-2 font-medium">
             <ShieldCheck className="h-4 w-4 shrink-0" />
             <span>Authorized Clinical Access</span>

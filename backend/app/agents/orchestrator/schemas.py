@@ -113,6 +113,8 @@ class OrchestratorResult(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     total_duration_ms: float = 0.0
     summary: str = ""
+    natural_answer: Optional[str] = None
+    execution_telemetry_summary: Optional[str] = None
     
     # Orchestration lifecycle telemetry
     steps_executed: List[str] = Field(default_factory=list)

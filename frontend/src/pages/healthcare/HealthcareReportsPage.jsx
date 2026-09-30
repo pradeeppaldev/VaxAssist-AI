@@ -36,8 +36,11 @@ import {
 // Mock Data
 import { MOCK_CLINICAL_REPORTS_LIST, MOCK_HEALTHCARE_WORKER } from '@/data/mockHealthcareData';
 import { agentApi } from '@/services/api';
+import { useDemoMode } from '@/context/DemoModeContext';
 
 export default function HealthcareReportsPage() {
+  const { isDemoMode, downloadDemoPdf } = useDemoMode();
+
   // Testing state switcher
   const [viewState, setViewState] = useState('normal');
 
@@ -49,14 +52,21 @@ export default function HealthcareReportsPage() {
     const title = typeof report === 'string' ? report : (report?.title || 'Clinical Audit Report');
     try {
       setDownloadToast(`Generating official PDF for "${title}"...`);
+      if (isDemoMode) {
+        const cleanName = title.toLowerCase().replace(/[^a-z0-9]/g, '_');
+        downloadDemoPdf(`vaxassist_clinical_report_${cleanName}.pdf`, title);
+        setDownloadToast(`Downloaded verified "${title}" (Signed PDF)`);
+        setTimeout(() => setDownloadToast(null), 3500);
+        return;
+      }
       await agentApi.downloadReportPdf({
-        report_type: 'clinician_brief',
-      });
+        report_type: 'comprehensive_record',
+      }, `vaxassist_clinical_report.pdf`);
       setDownloadToast(`Downloaded verified "${title}" (Signed PDF)`);
       setTimeout(() => setDownloadToast(null), 3500);
     } catch (err) {
       console.error('Download error:', err);
-      setDownloadToast('PDF generation failed. Please try again.');
+      setDownloadToast(`PDF generation failed: ${err.message || 'Please try again'}`);
       setTimeout(() => setDownloadToast(null), 4000);
     }
   };

@@ -64,16 +64,20 @@ import {
   MOCK_ADMIN_AUDIT_LOGS,
   MOCK_KNOWLEDGE_BASE_SUMMARY
 } from '@/data/mockAdminData';
+import { useDemoMode } from '@/context/DemoModeContext';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { isDemoMode } = useDemoMode();
 
   // Interactive View States for testing and inspection
   const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
 
   // Dynamic state for approvals queue
   const [pendingWorkers, setPendingWorkers] = useState(
-    MOCK_HEALTHCARE_WORKERS_ADMIN.filter(hw => hw.verificationStatus === 'PENDING')
+    isDemoMode
+      ? MOCK_HEALTHCARE_WORKERS_ADMIN.filter((hw) => hw.verificationStatus === 'PENDING')
+      : []
   );
   const [selectedWorker, setSelectedWorker] = useState(null);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
@@ -94,6 +98,12 @@ export default function AdminDashboard() {
   // Load real pending workers and telemetry from backend
   useEffect(() => {
     let isMounted = true;
+
+    if (isDemoMode) {
+      setPendingWorkers(MOCK_HEALTHCARE_WORKERS_ADMIN.filter((hw) => hw.verificationStatus === 'PENDING'));
+      return;
+    }
+
     const fetchAdminData = async () => {
       try {
         const [usersRes, kbRes] = await Promise.allSettled([
@@ -126,9 +136,7 @@ export default function AdminDashboard() {
               documents: ['State Medical Council Registration Certificate', 'Hospital Appointment Order'],
             }));
 
-          if (livePending.length > 0) {
-            setPendingWorkers((prev) => [...livePending, ...prev.filter((p) => !livePending.some((lp) => lp.id === p.id))]);
-          }
+          setPendingWorkers(livePending);
         }
 
         if (isMounted && kbRes.status === 'fulfilled' && kbRes.value?.data) {
@@ -147,7 +155,7 @@ export default function AdminDashboard() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isDemoMode]);
 
   // System Alerts local state
   const [alerts, setAlerts] = useState(MOCK_SYSTEM_ALERTS);
@@ -160,9 +168,19 @@ export default function AdminDashboard() {
   const handleApproveWorker = async () => {
     if (!selectedWorker) return;
     setActionErrorNotice(null);
+
+    if (isDemoMode) {
+      setPendingWorkers((prev) => prev.filter((w) => w.id !== selectedWorker.id));
+      setActionSuccessNotice(`[Demo Mode] Successfully approved Dr. ${selectedWorker.name.replace('Dr. ', '')} and issued clinical signing privileges.`);
+      setConfirmApprovalDialog(false);
+      setReviewDialogOpen(false);
+      setTimeout(() => setActionSuccessNotice(null), 5000);
+      return;
+    }
+
     try {
       await adminApi.updateUserStatus(selectedWorker.id, 'ACTIVE', 'Admin verified credentials');
-      setPendingWorkers(prev => prev.filter(w => w.id !== selectedWorker.id));
+      setPendingWorkers((prev) => prev.filter((w) => w.id !== selectedWorker.id));
       setActionSuccessNotice(`Successfully approved Dr. ${selectedWorker.name.replace('Dr. ', '')} and issued clinical signing privileges.`);
       setConfirmApprovalDialog(false);
       setReviewDialogOpen(false);
@@ -176,9 +194,19 @@ export default function AdminDashboard() {
   const handleRejectWorker = async () => {
     if (!selectedWorker) return;
     setActionErrorNotice(null);
+
+    if (isDemoMode) {
+      setPendingWorkers((prev) => prev.filter((w) => w.id !== selectedWorker.id));
+      setActionSuccessNotice(`[Demo Mode] Application for ${selectedWorker.name} has been rejected.`);
+      setConfirmRejectDialog(false);
+      setReviewDialogOpen(false);
+      setTimeout(() => setActionSuccessNotice(null), 5000);
+      return;
+    }
+
     try {
       await adminApi.updateUserStatus(selectedWorker.id, 'SUSPENDED', 'Application rejected by system administrator');
-      setPendingWorkers(prev => prev.filter(w => w.id !== selectedWorker.id));
+      setPendingWorkers((prev) => prev.filter((w) => w.id !== selectedWorker.id));
       setActionSuccessNotice(`Application for ${selectedWorker.name} has been rejected. Notification dispatched.`);
       setConfirmRejectDialog(false);
       setReviewDialogOpen(false);

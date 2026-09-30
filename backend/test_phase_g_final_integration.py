@@ -310,13 +310,19 @@ class TestPhaseGFinalIntegration(unittest.TestCase):
         doc_id = upload_resp.json()["data"]["id"]
         print(f"  PASS: Uploaded and indexed guideline document (ID: {doc_id}).")
 
-        # 5. Check Document Status
-        status_resp = self.client.get(
-            f"/api/v1/knowledge/documents/{doc_id}/status",
-            headers=admin_headers,
-        )
-        self.assertEqual(status_resp.status_code, 200)
-        self.assertEqual(status_resp.json()["data"]["status"], "INDEXED")
+        # 5. Check Document Status (wait up to 10s for async indexing to reach INDEXED)
+        status = None
+        for _ in range(20):
+            status_resp = self.client.get(
+                f"/api/v1/knowledge/documents/{doc_id}/status",
+                headers=admin_headers,
+            )
+            self.assertEqual(status_resp.status_code, 200)
+            status = status_resp.json()["data"]["status"]
+            if status in ("INDEXED", "FAILED"):
+                break
+            time.sleep(0.5)
+        self.assertEqual(status, "INDEXED")
         print("  PASS: Verified document status is confirmed INDEXED.")
 
         # 6. Re-index Document

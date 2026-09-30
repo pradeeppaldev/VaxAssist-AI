@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarDays,
   Clock,
@@ -59,6 +59,7 @@ import {
 } from '@/data/mockHealthcareData';
 
 export default function HealthcareSchedulesPage() {
+  const navigate = useNavigate();
   // Testing state switcher
   const [viewState, setViewState] = useState('normal');
 
@@ -221,7 +222,7 @@ export default function HealthcareSchedulesPage() {
             title="No vaccinations are scheduled for today"
             description="There are currently no patients booked in the Sector 14 Clinic vaccination session queue."
             actionLabel="View Patient Registry"
-            onAction={() => window.location.href = '/healthcare/patients'}
+            onAction={() => navigate('/healthcare/patients')}
           />
         </div>
       )}

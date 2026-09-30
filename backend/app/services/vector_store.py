@@ -76,6 +76,14 @@ class ChromaVectorStore:
         if len(chunk_ids) != len(embeddings) or len(chunk_ids) != len(documents) or len(chunk_ids) != len(metadatas):
             raise ValueError("Mismatched lengths among chunk_ids, embeddings, documents, and metadatas.")
 
+        dim = len(embeddings[0])
+        if dim <= 0:
+            raise ValueError("Invalid embedding vector: zero dimensions.")
+
+        for emb in embeddings:
+            if len(emb) != dim:
+                raise ValueError(f"Inconsistent vector dimensions: expected {dim}, got {len(emb)}.")
+
         try:
             # ChromaDB requires metadata values to be str, int, float, or bool
             sanitized_metadatas = []
@@ -88,6 +96,8 @@ class ChromaVectorStore:
                         sanitized[k] = v
                     else:
                         sanitized[k] = str(v)
+                sanitized["document_status"] = "INDEXED"
+                sanitized["embedding_dimensions"] = dim
                 sanitized_metadatas.append(sanitized)
 
             self.collection.upsert(
@@ -96,7 +106,7 @@ class ChromaVectorStore:
                 documents=documents,
                 metadatas=sanitized_metadatas,
             )
-            logger.info(f"Successfully upserted {len(chunk_ids)} chunks into collection '{self.collection_name}'.")
+            logger.info(f"Successfully upserted {len(chunk_ids)} chunks (dim {dim}) into collection '{self.collection_name}'.")
             return len(chunk_ids)
         except Exception as e:
             logger.error(f"Error upserting chunks into ChromaDB: {e}")
@@ -120,6 +130,31 @@ class ChromaVectorStore:
         except Exception as e:
             logger.error(f"Error deleting chunks for document {document_id}: {e}")
             raise VectorStoreError(f"Failed to delete document vectors from ChromaDB: {str(e)}")
+
+    def purge_orphaned_chunks(self, valid_document_ids: set) -> int:
+        """
+        Removes any chunks from ChromaDB whose knowledge_document_id is not in valid_document_ids
+        or whose document_status is not INDEXED.
+        Prevents orphaned or stale chunks from contaminating retrieval.
+        """
+        try:
+            coll = self.collection
+            data = coll.get()
+            ids = data.get("ids", [])
+            metadatas = data.get("metadatas", [])
+            to_delete = []
+            for cid, meta in zip(ids, metadatas):
+                doc_id = meta.get("knowledge_document_id", "")
+                if doc_id not in valid_document_ids or meta.get("document_status") != "INDEXED":
+                    to_delete.append(cid)
+            if to_delete:
+                coll.delete(ids=to_delete)
+                logger.info(f"Purged {len(to_delete)} orphaned/unindexed chunks from ChromaDB.")
+                return len(to_delete)
+            return 0
+        except Exception as e:
+            logger.warning(f"Could not purge orphaned chunks from ChromaDB: {e}")
+            return 0
 
     def search(
         self,

@@ -108,6 +108,7 @@ def calculate_member_schedule(
 
     # Map rule codes to matched administered records to calculate subsequent intervals
     completed_rule_records: Dict[str, Dict[str, Any]] = {}
+    projected_rule_due_dates: Dict[str, date] = {}
 
     for rule in catalog:
         rule_code = rule.get("code", rule.get("vaccine_code", "")).strip().upper()
@@ -131,6 +132,9 @@ def calculate_member_schedule(
             completed_count += 1
             completed_rule_records[rule_code] = matched_rec
             completed_rule_records[rule_series] = matched_rec
+            projected_rule_due_dates[rule_code] = adm_date
+            if rule_series:
+                projected_rule_due_dates[rule_series] = adm_date
         else:
             record_id = None
             adm_date = None
@@ -146,19 +150,37 @@ def calculate_member_schedule(
                     prev_adm_date = completed_rule_records[prev_req.upper()]["administered_date"]
                 elif isinstance(prev_req, tuple):
                     req_code, req_dose = prev_req
-                    for k, v in completed_rule_records.items():
-                        if (k == req_code.upper() or v.get("vaccine_code") == req_code.upper()) and v.get("dose_number") == req_dose:
-                            prev_adm_date = v["administered_date"]
-                            break
+                    if req_code.upper() in completed_rule_records:
+                        prev_adm_date = completed_rule_records[req_code.upper()]["administered_date"]
+                    else:
+                        for k, v in completed_rule_records.items():
+                            if (k == req_code.upper() or v.get("vaccine_code") == req_code.upper()) and (req_dose is None or v.get("dose_number") == req_dose):
+                                prev_adm_date = v["administered_date"]
+                                break
 
             min_age_days = rule.get("minimum_age_days")
             min_age_date = date_of_birth + timedelta(days=min_age_days) if min_age_days else recommended_date
 
+            previous_dose_unadministered = bool(prev_req and not prev_adm_date)
             if prev_adm_date and min_interval_days > 0:
                 interval_due_date = prev_adm_date + timedelta(days=min_interval_days)
                 calculated_due_date = max(recommended_date, interval_due_date, min_age_date)
+            elif previous_dose_unadministered:
+                min_wait = timedelta(days=min_interval_days or 28)
+                prev_proj_date = None
+                if isinstance(prev_req, str):
+                    prev_proj_date = projected_rule_due_dates.get(prev_req.upper())
+                elif isinstance(prev_req, tuple):
+                    prev_proj_date = projected_rule_due_dates.get(str(prev_req[0]).upper())
+
+                base_ref = max(reference_date, prev_proj_date) if prev_proj_date else reference_date
+                calculated_due_date = max(recommended_date, base_ref + min_wait)
             else:
                 calculated_due_date = max(recommended_date, min_age_date)
+
+            projected_rule_due_dates[rule_code] = calculated_due_date
+            if rule_series:
+                projected_rule_due_dates[rule_series] = calculated_due_date
 
             # 1. Strict permanent expiration / missed window where specifically indicated by source:
             # Hepatitis B birth dose (< 24 hours)
@@ -226,24 +248,31 @@ def calculate_member_schedule(
                     )
                     clinical_review_count += 1
 
+            # 2b. Sequential dose whose prerequisite dose has not been administered:
+            elif previous_dose_unadministered:
+                status = VaccinationStatus.UPCOMING
+                req_label = prev_req[0] if isinstance(prev_req, tuple) else str(prev_req)
+                status_reason = (
+                    f"Upcoming: sequential dose dependent on prior administration of {req_label} "
+                    f"(minimum interval: {min_interval_days or 28} days)."
+                )
+                upcoming_count += 1
+
             # 3. Standard routine schedule evaluation (UPCOMING / DUE / OVERDUE)
             else:
-                due_window = timedelta(days=rule.get("due_window_days", 7))
-                grace_period = timedelta(days=rule.get("grace_period_days", 30))
-
-                if reference_date < calculated_due_date - due_window:
+                if reference_date < calculated_due_date:
                     status = VaccinationStatus.UPCOMING
                     status_reason = f"Upcoming: scheduled for {calculated_due_date.isoformat()} ({rule['recommended_age_display']})"
                     upcoming_count += 1
-                elif reference_date > calculated_due_date + grace_period:
+                elif reference_date == calculated_due_date:
+                    status = VaccinationStatus.DUE
+                    status_reason = f"Due today for administration ({rule['recommended_age_display']})"
+                    due_count += 1
+                else:
                     status = VaccinationStatus.OVERDUE
                     days_overdue = (reference_date - calculated_due_date).days
                     status_reason = f"Overdue by {days_overdue} days (was due on {calculated_due_date.isoformat()})"
                     overdue_count += 1
-                else:
-                    status = VaccinationStatus.DUE
-                    status_reason = f"Currently due for administration (recommended on {calculated_due_date.isoformat()})"
-                    due_count += 1
 
         schedule_items.append({
             "code": rule_code,
@@ -260,6 +289,7 @@ def calculate_member_schedule(
             "recommended_date": recommended_date,
             "calculated_due_date": calculated_due_date,
             "status": status,
+            "days_overdue": max(0, (reference_date - calculated_due_date).days) if (status == VaccinationStatus.OVERDUE.value or status == VaccinationStatus.OVERDUE) else 0,
             "administered_date": adm_date,
             "record_id": record_id,
             "status_reason": status_reason,

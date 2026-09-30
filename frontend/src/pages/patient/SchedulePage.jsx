@@ -65,74 +65,114 @@ import {
   INITIAL_FAMILY_MEMBERS,
   INITIAL_SCHEDULE_EVENTS,
 } from '@/data/mockFamilyData';
+import { useDemoMode } from '@/context/DemoModeContext';
 
 export default function SchedulePage() {
   const navigate = useNavigate();
+  const { isDemoMode, setDemoMode, demoStore } = useDemoMode();
 
   // State Management
-  const [events, setEvents] = useState(INITIAL_SCHEDULE_EVENTS);
-  const [familyMembers, setFamilyMembers] = useState(INITIAL_FAMILY_MEMBERS);
+  const [events, setEvents] = useState(isDemoMode ? INITIAL_SCHEDULE_EVENTS : []);
+  const [familyMembers, setFamilyMembers] = useState(
+    isDemoMode ? (demoStore.familyMembers || INITIAL_FAMILY_MEMBERS) : []
+  );
   const [viewState, setViewState] = useState('normal'); // 'normal' | 'loading' | 'empty' | 'error'
+  const [loadingSchedule, setLoadingSchedule] = useState(!isDemoMode);
 
   useEffect(() => {
     let isMounted = true;
+
+    if (isDemoMode) {
+      setEvents(INITIAL_SCHEDULE_EVENTS);
+      setFamilyMembers(demoStore.familyMembers || INITIAL_FAMILY_MEMBERS);
+      setLoadingSchedule(false);
+      return;
+    }
+
     const loadScheduleData = async () => {
+      setLoadingSchedule(true);
       try {
         const famRes = await familyApi.getMembers();
-        if (isMounted && famRes?.data?.length > 0) {
-          const membersList = famRes.data.map((m) => ({
-            id: m.id,
-            name: m.full_name,
-            relationship: m.relationship,
-            dob: m.date_of_birth,
-          }));
-          setFamilyMembers(membersList);
+        if (!isMounted) return;
+        const liveMembers = famRes?.data || [];
+        if (liveMembers.length === 0) {
+          setFamilyMembers([]);
+          setEvents([]);
+          setLoadingSchedule(false);
+          return;
+        }
 
-          // Fetch schedule for all family members
-          try {
-            const allSchResults = await Promise.allSettled(
-              membersList.map((m) => vaccinationApi.getMemberSchedule(m.id))
-            );
-            const allLiveEvents = [];
-            allSchResults.forEach((res, idx) => {
-              const currentMember = membersList[idx];
-              if (res.status === 'fulfilled' && res.value?.data?.items?.length > 0) {
-                res.value.data.items.forEach((item, itemIdx) => {
-                  const dateStr = item.due_date || new Date().toISOString().split('T')[0];
-                  const dateObj = new Date(dateStr);
-                  allLiveEvents.push({
-                    id: `sch-${currentMember.id}-${itemIdx}`,
-                    memberId: currentMember.id,
-                    memberName: currentMember.name,
-                    memberRelation: currentMember.relationship,
-                    vaccineName: item.vaccine_name || item.vaccine_code,
-                    dose: item.dose_name || `Dose ${item.dose_number || 1}`,
-                    scheduledDate: dateStr,
-                    formattedDate: isNaN(dateObj.getTime()) ? 'Scheduled' : dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }),
-                    status: item.status || 'UPCOMING',
-                    clinic: 'Lilavati Hospital & Research Centre, Mumbai',
-                    provider: 'Dr. Anjali Deshmukh',
-                    notes: item.notes || 'Universal Immunization Programme schedule.',
-                  });
+        const membersList = liveMembers.map((m) => ({
+          id: m.id,
+          name: m.full_name,
+          relationship: m.relationship,
+          dob: m.date_of_birth,
+        }));
+        setFamilyMembers(membersList);
+
+        // Fetch schedule for all family members
+        try {
+          const allSchResults = await Promise.allSettled(
+            membersList.map((m) => vaccinationApi.getMemberSchedule(m.id))
+          );
+          const allLiveEvents = [];
+          const nowRef = new Date('2026-10-01');
+
+          allSchResults.forEach((res, idx) => {
+            const currentMember = membersList[idx];
+            const scheduleItems = res.status === 'fulfilled' && (res.value?.data?.schedule_items || res.value?.data?.items);
+            if (Array.isArray(scheduleItems) && scheduleItems.length > 0) {
+              scheduleItems.forEach((item, itemIdx) => {
+                const dateStr = item.calculated_due_date || item.due_date || item.recommended_date || new Date().toISOString().split('T')[0];
+                const dateObj = new Date(dateStr);
+                const isOverdue = item.status === 'OVERDUE';
+                const isCatchUp = item.status === 'OVERDUE' || item.status === 'CATCH_UP_REQUIRED';
+                const daysDiff = !isNaN(dateObj.getTime()) ? Math.floor((nowRef - dateObj) / (1000 * 60 * 60 * 24)) : 0;
+                const daysOverdue = item.days_overdue || (isOverdue ? Math.max(1, daysDiff) : 0);
+
+                allLiveEvents.push({
+                  id: `sch-${currentMember.id}-${itemIdx}`,
+                  memberId: currentMember.id,
+                  memberName: currentMember.name,
+                  memberRelation: currentMember.relationship,
+                  vaccineName: item.vaccine_name || item.vaccine_code,
+                  dose: item.dose_name || `Dose ${item.dose_number || 1}`,
+                  scheduledDate: dateStr,
+                  formattedDate: isNaN(dateObj.getTime()) ? 'Scheduled' : dateObj.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }),
+                  day: isNaN(dateObj.getTime()) ? 1 : dateObj.getDate(),
+                  month: isNaN(dateObj.getTime()) ? 0 : dateObj.getMonth(),
+                  year: isNaN(dateObj.getTime()) ? 2026 : dateObj.getFullYear(),
+                  status: item.status || 'UPCOMING',
+                  countdown: isOverdue ? `${daysOverdue} days overdue` : (item.status === 'DUE' ? 'Due today' : undefined),
+                  isOverdue,
+                  isCatchUp,
+                  clinic: 'Lilavati Hospital & Research Centre, Mumbai',
+                  provider: 'Dr. Anjali Deshmukh',
+                  notes: item.notes || item.catch_up_notes || 'Universal Immunization Programme schedule.',
                 });
-              }
-            });
-            if (isMounted && allLiveEvents.length > 0) {
-              setEvents(allLiveEvents);
+              });
             }
-          } catch (sErr) {
-            // Keep initial demo schedule
+          });
+          if (isMounted) {
+            setEvents(allLiveEvents);
           }
+        } catch (sErr) {
+          if (isMounted) setEvents([]);
         }
       } catch (err) {
-        // Keep initial demo schedule
+        if (isMounted) {
+          setFamilyMembers([]);
+          setEvents([]);
+        }
+      } finally {
+        if (isMounted) setLoadingSchedule(false);
       }
     };
     loadScheduleData();
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isDemoMode, demoStore.familyMembers]);
 
   // Filter States
   const [selectedMemberId, setSelectedMemberId] = useState('ALL');
@@ -158,7 +198,7 @@ export default function SchedulePage() {
       dueSoon: events.filter((e) => e.status === 'DUE').length,
       overdue: events.filter((e) => e.status === 'OVERDUE').length,
       catchUp: events.filter((e) => e.status === 'CATCH_UP_REQUIRED').length,
-      completedThisMonth: 1, // Demo completed in current month
+      completedThisMonth: events.filter((e) => e.status === 'COMPLETED' && e.scheduledDate?.startsWith('2026-10')).length,
     };
   }, [events]);
 
@@ -434,14 +474,24 @@ export default function SchedulePage() {
       {showEmpty ? (
         <EmptyState
           icon={CalendarDays}
-          title="Your schedule is clear"
-          description="No upcoming vaccination events are currently scheduled for your family members."
-          actionLabel="+ Add Vaccination Record"
-          onAction={() => navigate('/vaccinations')}
-          secondaryActionLabel="Restore Demo Schedule"
+          title={familyMembers.length === 0 ? "No family members enrolled" : "Your schedule is clear"}
+          description={
+            familyMembers.length === 0
+              ? isDemoMode
+                ? "No demo family members found. Switch to Live mode or restore demo records."
+                : "Add family members to automatically track national immunization schedules, upcoming milestones, and overdue alerts."
+              : "No upcoming vaccination events are currently scheduled for your selected family members."
+          }
+          actionLabel={familyMembers.length === 0 ? "+ Add Family Member" : "+ Add Vaccination Record"}
+          onAction={() => navigate(familyMembers.length === 0 ? '/family' : '/vaccinations')}
+          secondaryActionLabel={!isDemoMode ? "Switch to Demo Mode" : "Restore Demo Schedule"}
           onSecondaryAction={() => {
-            setEvents(INITIAL_SCHEDULE_EVENTS);
-            setViewState('normal');
+            if (!isDemoMode) {
+              setDemoMode(true);
+            } else {
+              setEvents(INITIAL_SCHEDULE_EVENTS);
+              setViewState('normal');
+            }
           }}
           className="my-12 py-16"
         />

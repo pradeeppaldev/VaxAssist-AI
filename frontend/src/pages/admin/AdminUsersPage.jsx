@@ -70,12 +70,21 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { adminApi } from '@/services/api';
+import { useDemoMode } from '@/context/DemoModeContext';
+import { MOCK_ADMIN_USERS } from '@/data/mockAdminData';
 
 export function AdminUsersPage() {
+  const { isDemoMode } = useDemoMode();
   const [users, setUsers] = useState([]);
   const [viewState, setViewState] = useState('loading'); // 'normal' | 'loading' | 'empty' | 'error'
 
   const loadBackendUsers = React.useCallback(async () => {
+    if (isDemoMode) {
+      setUsers(MOCK_ADMIN_USERS);
+      setViewState(MOCK_ADMIN_USERS.length === 0 ? 'empty' : 'normal');
+      return;
+    }
+
     try {
       const res = await adminApi.getUsers();
       if (res?.data && Array.isArray(res.data)) {
@@ -108,7 +117,7 @@ export function AdminUsersPage() {
       console.warn('Failed to load users from backend:', err);
       setViewState('empty');
     }
-  }, []);
+  }, [isDemoMode]);
 
   React.useEffect(() => {
     loadBackendUsers();
@@ -163,6 +172,32 @@ export function AdminUsersPage() {
 
   const executeStatusUpdate = async () => {
     if (!selectedUser) return;
+
+    if (isDemoMode) {
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === selectedUser.id
+            ? {
+                ...u,
+                role: newRole || u.role,
+                roleLabel:
+                  newRole === 'HEALTHCARE_WORKER'
+                    ? 'Healthcare Professional'
+                    : newRole === 'ADMIN'
+                    ? 'System Administrator'
+                    : 'Patient / Family',
+                account_status: newStatus || u.account_status,
+                activityStatus: (newStatus || u.account_status) === 'ACTIVE' ? 'Active' : (newStatus || u.account_status),
+              }
+            : u
+        )
+      );
+      setNoticeMessage(`[Demo Mode] Account for ${selectedUser.name} updated to ${newStatus} (${newRole}).`);
+      setManageModalOpen(false);
+      setConfirmSuspendOpen(false);
+      setTimeout(() => setNoticeMessage(null), 4000);
+      return;
+    }
 
     try {
       if (newRole && newRole !== selectedUser.role) {

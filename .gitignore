@@ -1,7 +1,14 @@
 # Environment variables
 .env
 .env.local
+.env.*
 *.env
+!.env.example
+!.env.template
+
+# Cloud CLI & Deployment caches
+.vercel/
+.railway/
 
 # Dependencies
 node_modules/

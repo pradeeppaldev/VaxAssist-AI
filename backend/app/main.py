@@ -11,6 +11,8 @@ logging.basicConfig(
     level=logging.INFO if settings.DEBUG else logging.WARNING,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 logger = logging.getLogger("vaxassist.main")
 
 
@@ -61,12 +63,15 @@ origins = settings.BACKEND_CORS_ORIGINS
 if isinstance(origins, str):
     origins = [origins]
 
+is_wildcard = "*" in origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"] if is_wildcard else origins,
+    allow_origin_regex=None if is_wildcard else r"^https?:\/\/(localhost|127\.0\.0\.1|.*\.vercel\.app)(:\d+)?$",
+    allow_credentials=not is_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Report-ID", "X-Verification-Hash"],
 )
 
 # Include API v1 router
