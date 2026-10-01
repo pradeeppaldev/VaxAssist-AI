@@ -5,6 +5,7 @@
 *.env
 !.env.example
 !.env.template
+!frontend/.env.production
 
 # Cloud CLI & Deployment caches
 .vercel/

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     # CORS settings
     BACKEND_CORS_ORIGINS: Union[List[str], str] = [
+        "https://vax-assist-ai.vercel.app",
+        "https://vaxassist-ai.vercel.app",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]

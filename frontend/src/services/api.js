@@ -5,7 +5,7 @@ import {
   GLOBAL_STORAGE_KEYS,
 } from './offlineSync.js';
 
-const rawBaseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'http://localhost:8000/api/v1';
+const rawBaseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || 'https://vaxassist-ai.onrender.com/api/v1';
 const API_BASE_URL = String(rawBaseUrl).trim().replace(/\/+$/, '');
 
 /**
