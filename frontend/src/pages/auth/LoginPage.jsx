@@ -146,36 +146,118 @@ export default function LoginPage() {
             </form>
 
             {/* Quick Demo Credentials */}
-            <div className="mt-6 pt-5 border-t border-border space-y-2.5">
-              <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-muted-foreground">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span>Quick Demo Accounts:</span>
+            <div className="mt-6 pt-5 border-t border-border space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-foreground">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <span>Quick Demo Accounts</span>
+                </div>
+                <span className="text-[11px] text-muted-foreground font-medium">Click to auto-fill</span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('admin@vaxassist.ai', 'Admin@VaxAssist2026')}
-                  className="text-left rounded-lg bg-muted/60 hover:bg-muted p-2 text-xs border border-border transition text-foreground font-mono cursor-pointer"
+
+              <div className="grid grid-cols-1 gap-2.5">
+                {/* 1. Patient / Family */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fillCredentials('rajesh.sharma@vaxassist.demo', 'Rajesh@Vax2026!')}
+                  onKeyDown={(e) => e.key === 'Enter' && fillCredentials('rajesh.sharma@vaxassist.demo', 'Rajesh@Vax2026!')}
+                  className={`text-left rounded-lg p-2.5 text-xs border transition cursor-pointer ${
+                    email === 'rajesh.sharma@vaxassist.demo'
+                      ? 'bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/30'
+                      : 'bg-muted/50 hover:bg-muted border-border'
+                  }`}
                 >
-                  <div className="font-semibold text-purple-600 dark:text-purple-400">Admin</div>
-                  <div className="text-[10px] text-muted-foreground truncate">admin@vaxassist.ai</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('priya.sharma@apollohealth.org', 'Doctor@VaxAssist2026')}
-                  className="text-left rounded-lg bg-muted/60 hover:bg-muted p-2 text-xs border border-border transition text-foreground font-mono cursor-pointer"
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                      Patient / Family
+                    </span>
+                    <span className="text-[10px] font-medium text-muted-foreground bg-background/80 px-1.5 py-0.5 rounded border border-border/50">
+                      Sharma Family Household
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[11px] font-mono text-muted-foreground">
+                    <span className="text-foreground font-medium">rajesh.sharma@vaxassist.demo</span>
+                    <span className="text-muted-foreground bg-muted px-1.5 py-0.2 rounded border border-border/40">
+                      Rajesh@Vax2026!
+                    </span>
+                  </div>
+                </div>
+
+                {/* 2. Healthcare Worker (with Alt Toggle) */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fillCredentials('dr.anjali.deshmukh@vaxassist.demo', 'DrAnjali@Vax2026!')}
+                  onKeyDown={(e) => e.key === 'Enter' && fillCredentials('dr.anjali.deshmukh@vaxassist.demo', 'DrAnjali@Vax2026!')}
+                  className={`text-left rounded-lg p-2.5 text-xs border transition cursor-pointer ${
+                    email === 'dr.anjali.deshmukh@vaxassist.demo' || email === 'dr.vikram.patil@vaxassist.demo'
+                      ? 'bg-blue-500/10 border-blue-500/40 ring-1 ring-blue-500/30'
+                      : 'bg-muted/50 hover:bg-muted border-border'
+                  }`}
                 >
-                  <div className="font-semibold text-blue-600 dark:text-blue-400">Healthcare</div>
-                  <div className="text-[10px] text-muted-foreground truncate">priya.sharma@apollo...</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => fillCredentials('rajesh.verma@gmail.com', 'Family@VaxAssist2026')}
-                  className="text-left rounded-lg bg-muted/60 hover:bg-muted p-2 text-xs border border-border transition text-foreground font-mono cursor-pointer"
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-blue-500"></span>
+                      Healthcare Worker
+                    </span>
+                    <span className="text-[10px] font-medium text-muted-foreground bg-background/80 px-1.5 py-0.5 rounded border border-border/50">
+                      {email === 'dr.vikram.patil@vaxassist.demo' ? 'KEM Hospital' : 'Lilavati Hospital'}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[11px] font-mono text-muted-foreground">
+                    <span className="text-foreground font-medium">
+                      {email === 'dr.vikram.patil@vaxassist.demo' ? 'dr.vikram.patil@vaxassist.demo' : 'dr.anjali.deshmukh@vaxassist.demo'}
+                    </span>
+                    <span className="text-muted-foreground bg-muted px-1.5 py-0.2 rounded border border-border/40">
+                      {email === 'dr.vikram.patil@vaxassist.demo' ? 'DrVikram@Vax2026!' : 'DrAnjali@Vax2026!'}
+                    </span>
+                  </div>
+                  {/* Alternative HCW Quick Option */}
+                  <div className="mt-2 pt-1.5 border-t border-border/40 flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground">Alt Clinician:</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fillCredentials('dr.vikram.patil@vaxassist.demo', 'DrVikram@Vax2026!');
+                      }}
+                      className="text-primary hover:underline font-medium font-sans"
+                    >
+                      Use Dr. Vikram Patil (KEM Hospital)
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3. Administrator */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => fillCredentials('admin@vaxassist.demo', 'Admin@Vax2026!')}
+                  onKeyDown={(e) => e.key === 'Enter' && fillCredentials('admin@vaxassist.demo', 'Admin@Vax2026!')}
+                  className={`text-left rounded-lg p-2.5 text-xs border transition cursor-pointer ${
+                    email === 'admin@vaxassist.demo'
+                      ? 'bg-purple-500/10 border-purple-500/40 ring-1 ring-purple-500/30'
+                      : 'bg-muted/50 hover:bg-muted border-border'
+                  }`}
                 >
-                  <div className="font-semibold text-emerald-600 dark:text-emerald-400">Patient</div>
-                  <div className="text-[10px] text-muted-foreground truncate">rajesh.verma@gmail...</div>
-                </button>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-purple-500"></span>
+                      Administrator
+                    </span>
+                    <span className="text-[10px] font-medium text-muted-foreground bg-background/80 px-1.5 py-0.5 rounded border border-border/50">
+                      State Immunization HQ / MoHFW
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-1 text-[11px] font-mono text-muted-foreground">
+                    <span className="text-foreground font-medium">admin@vaxassist.demo</span>
+                    <span className="text-muted-foreground bg-muted px-1.5 py-0.2 rounded border border-border/40">
+                      Admin@Vax2026!
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </CardContent>

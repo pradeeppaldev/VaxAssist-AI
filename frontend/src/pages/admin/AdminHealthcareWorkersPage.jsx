@@ -513,8 +513,12 @@ export function AdminHealthcareWorkersPage() {
                     <TableCell className="py-3.5">
                       <div className="flex items-center gap-3">
                         <img
-                          src={worker.avatar}
+                          src={worker.avatar || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80'}
                           alt={worker.name}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80';
+                          }}
                           className="h-10 w-10 rounded-full object-cover border border-border shrink-0"
                         />
                         <div className="min-w-0">
@@ -582,8 +586,12 @@ export function AdminHealthcareWorkersPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
-                      src={worker.avatar}
+                      src={worker.avatar || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80'}
                       alt={worker.name}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80';
+                      }}
                       className="h-11 w-11 rounded-full object-cover border border-border shrink-0"
                     />
                     <div className="min-w-0">
@@ -647,8 +655,12 @@ export function AdminHealthcareWorkersPage() {
               <div className="p-4 rounded-xl border border-border bg-muted/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3.5 min-w-0">
                   <img
-                    src={selectedWorker.avatar}
+                    src={selectedWorker.avatar || 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80'}
                     alt={selectedWorker.name}
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80';
+                    }}
                     className="h-14 w-14 rounded-full object-cover border border-border shrink-0"
                   />
                   <div className="space-y-0.5 min-w-0">

@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
         from app.services.vector_store import vector_store
         from app.services.monitoring_scheduler import monitoring_scheduler
         await user_service.bootstrap_admin()
+        await user_service.bootstrap_demo_accounts()
         await family_service.init_indexes()
         await vaccination_service.init_indexes()
         await notification_service.init_indexes()

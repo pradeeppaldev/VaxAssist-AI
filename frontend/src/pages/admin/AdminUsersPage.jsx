@@ -92,12 +92,27 @@ export function AdminUsersPage() {
           let roleLabel = 'Patient / Family';
           if (u.role === 'HEALTHCARE_WORKER') roleLabel = 'Healthcare Professional';
           if (u.role === 'ADMIN') roleLabel = 'System Administrator';
+
+          let avatar = u.avatar;
+          if (!avatar) {
+            if (u.email?.includes('rajesh.verma') || u.name?.toLowerCase().includes('rajesh verma')) {
+              avatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80';
+            } else if (u.role === 'PATIENT') {
+              avatar = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+            } else if (u.role === 'HEALTHCARE_WORKER') {
+              avatar = 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=150&auto=format&fit=crop&q=80';
+            } else {
+              avatar = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+            }
+          }
+
           return {
             id: u.id,
             name: u.name,
             email: u.email,
             role: u.role,
             roleLabel,
+            avatar,
             account_status: u.account_status,
             organization: u.clinic_or_hospital || 'VaxAssist Health Network',
             phone: u.phone_number || '',
@@ -447,8 +462,12 @@ export function AdminUsersPage() {
                     <TableCell className="py-3">
                       <div className="flex items-center gap-3">
                         <img
-                          src={u.avatar}
+                          src={u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
                           alt={u.name}
+                          onError={(e) => {
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+                          }}
                           className="h-9 w-9 rounded-full object-cover border border-border shrink-0"
                         />
                         <div className="min-w-0">
@@ -521,8 +540,12 @@ export function AdminUsersPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <img
-                      src={u.avatar}
+                      src={u.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
                       alt={u.name}
+                      onError={(e) => {
+                        e.currentTarget.onerror = null;
+                        e.currentTarget.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+                      }}
                       className="h-10 w-10 rounded-full object-cover border border-border shrink-0"
                     />
                     <div className="min-w-0">
@@ -586,8 +609,12 @@ export function AdminUsersPage() {
               {/* Profile Card */}
               <div className="p-4 rounded-xl border border-border bg-muted/20 flex items-start gap-3.5">
                 <img
-                  src={selectedUser.avatar}
+                  src={selectedUser.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
                   alt={selectedUser.name}
+                  onError={(e) => {
+                    e.currentTarget.onerror = null;
+                    e.currentTarget.src = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+                  }}
                   className="h-12 w-12 rounded-full object-cover border border-border shrink-0"
                 />
                 <div className="space-y-1 min-w-0">

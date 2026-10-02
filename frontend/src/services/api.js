@@ -298,6 +298,12 @@ export const adminApi = {
       body: JSON.stringify({ role }),
     });
   },
+
+  getSystemInfo: async () => {
+    return await request('/admin/settings/system-info', {
+      method: 'GET',
+    });
+  },
 };
 
 /**

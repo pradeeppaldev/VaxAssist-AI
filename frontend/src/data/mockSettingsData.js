@@ -15,7 +15,7 @@ export const INITIAL_USER_PROFILE = {
   role: 'PATIENT',
   roleLabel: 'Family Care Administrator',
   account_status: 'ACTIVE',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
   avatarFallback: 'RV',
   address: 'B-402, Green Park Residency, 14th Main, Indiranagar',
   city: 'Bengaluru',

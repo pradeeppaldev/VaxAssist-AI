@@ -285,5 +285,96 @@ class UserService:
             logger.warning(f"Could not bootstrap initial admin: {exc}")
             return None
 
+    async def bootstrap_demo_accounts(self) -> None:
+        """
+        Safely seeds or ensures all 4 official demo accounts exist and are active:
+        - Patient: rajesh.sharma@vaxassist.demo / Rajesh@Vax2026!
+        - Healthcare Worker: dr.anjali.deshmukh@vaxassist.demo / DrAnjali@Vax2026!
+        - Alt Healthcare Worker: dr.vikram.patil@vaxassist.demo / DrVikram@Vax2026!
+        - Admin: admin@vaxassist.demo / Admin@Vax2026!
+        """
+        demo_specs = [
+            {
+                "email": "admin@vaxassist.demo",
+                "password": "Admin@Vax2026!",
+                "name": "Dr. Sunita Rao (MoHFW Admin)",
+                "role": UserRole.ADMIN.value,
+                "account_status": AccountStatus.ACTIVE.value,
+                "clinic_or_hospital": "State Immunization HQ / MoHFW",
+                "license_number": "MCI-ADMIN-001",
+                "phone_number": "+91 99000 11223",
+            },
+            {
+                "email": "dr.anjali.deshmukh@vaxassist.demo",
+                "password": "DrAnjali@Vax2026!",
+                "name": "Dr. Anjali Deshmukh",
+                "role": UserRole.HEALTHCARE_WORKER.value,
+                "account_status": AccountStatus.ACTIVE.value,
+                "clinic_or_hospital": "Lilavati Hospital",
+                "license_number": "MMC-2012-08492",
+                "phone_number": "+91 98450 12890",
+            },
+            {
+                "email": "dr.vikram.patil@vaxassist.demo",
+                "password": "DrVikram@Vax2026!",
+                "name": "Dr. Vikram Patil",
+                "role": UserRole.HEALTHCARE_WORKER.value,
+                "account_status": AccountStatus.ACTIVE.value,
+                "clinic_or_hospital": "KEM Hospital",
+                "license_number": "MMC-2008-01234",
+                "phone_number": "+91 98200 44512",
+            },
+            {
+                "email": "rajesh.sharma@vaxassist.demo",
+                "password": "Rajesh@Vax2026!",
+                "name": "Rajesh Sharma",
+                "role": UserRole.PATIENT.value,
+                "account_status": AccountStatus.ACTIVE.value,
+                "clinic_or_hospital": "Sharma Family Household",
+                "license_number": None,
+                "phone_number": "+91 98112 45901",
+            },
+        ]
+
+        try:
+            collection = self.get_collection()
+            now = datetime.now(timezone.utc)
+            for spec in demo_specs:
+                email = spec["email"].lower().strip()
+                existing = await collection.find_one({"email": email})
+                if existing:
+                    # Update password and ensure active status
+                    await collection.update_one(
+                        {"_id": existing["_id"]},
+                        {
+                            "$set": {
+                                "hashed_password": hash_password(spec["password"]),
+                                "role": spec["role"],
+                                "account_status": AccountStatus.ACTIVE.value,
+                                "clinic_or_hospital": spec["clinic_or_hospital"],
+                                "license_number": spec.get("license_number"),
+                                "updated_at": now,
+                            }
+                        },
+                    )
+                else:
+                    new_doc = {
+                        "name": spec["name"],
+                        "email": email,
+                        "hashed_password": hash_password(spec["password"]),
+                        "role": spec["role"],
+                        "account_status": AccountStatus.ACTIVE.value,
+                        "license_number": spec.get("license_number"),
+                        "clinic_or_hospital": spec["clinic_or_hospital"],
+                        "phone_number": spec.get("phone_number"),
+                        "status_reason": "Pre-configured demo account",
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                    await collection.insert_one(new_doc)
+            logger.info("Verified and bootstrapped all 4 official demo accounts successfully.")
+        except Exception as exc:
+            logger.warning(f"Could not bootstrap demo accounts: {exc}")
+
 
 user_service = UserService()
